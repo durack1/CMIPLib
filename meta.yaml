@@ -1,0 +1,25 @@
+package:
+    name: CMIPLib
+    version: 0.0.1
+
+source:
+    git_rev: 0.0.1
+    git_url: git://github.com/durack1/CMIPLib.git
+
+build:
+  number: 0
+  noarch: True
+#  noarch_python: True
+
+requirements:
+  build:
+    - python >=2.7.14,<3
+    - setuptools
+  run:
+    - python >=2.7.14,<3
+    - cdms2 >=3
+    - cdutil
+    - pytz
+    - seawater
+about:
+    home:  http://github.com/durack1/CMIPLib
