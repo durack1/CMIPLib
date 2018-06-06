@@ -10,4 +10,4 @@ bash cpyfromsvn.sh
 python convertXML.py
 bash createAllTables.sh
 bash diffAllTables.sh
-
+bash copyAllTables.sh
