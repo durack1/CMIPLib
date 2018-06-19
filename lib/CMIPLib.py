@@ -10,13 +10,14 @@ Paul J. Durack and Stephen Po-Chedley 11th April 2018
 |  PJD 11 Apr 2018  - Initialized repository
 |  SP  15 Jun 2018  - Added initial functions for reading/writing SQL DB
 |  PJD 19 Jun 2018  - Updated with functions from make_cmip5_xml1.py
+|  PJD 19 2018       - Updated to use conda mysqlclient
 
 @authors: durack1, @pochedley1
 """
 
 import datetime
 import gc
-import MySQLdb # pip install mysqlclient
+import MySQLdb #pip install mysqlclient; (cdat80py2) bash-4.1$ conda install -c carta mysqlclient
 import numpy as np
 import os
 import re
