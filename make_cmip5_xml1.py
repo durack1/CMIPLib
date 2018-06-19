@@ -13,6 +13,7 @@ PJD 22 Feb 2018     - Update to point at CSS03 mounts
 PJD  9 Apr 2018     - Updated to point to all CSS03 mounts (Jeff's list)
 PJD 22 May 2018     - Added new path, following Jeff update
 PJD 31 May 2018     - Added new path, following Sasha update
+PJD 19 Jun 2018     - Updated all print functions for python3
                     - TODO:
                     Add check to ensure CSS/GDO systems are online, if not abort - use sysCallTimeout function
                     sysCallTimeout(['ls','/cmip5_gdo2/'],5.) ; http://stackoverflow.com/questions/13685239/check-in-python-script-if-nfs-server-is-mounted-and-online
@@ -39,7 +40,7 @@ PJD 31 May 2018     - Added new path, following Sasha update
 
 @author: durack1
 """
-
+from __future__ import print_function ; # Python2->3 conversion
 import argparse,cPickle,datetime,gc,glob,gzip,os,shlex,sys,time
 sys.path.append('/export/durack1/git/CMIPLib/lib/')
 from CMIPLib import checkPID,logWrite,pathToFile,xmlLog,xmlWrite
@@ -69,16 +70,16 @@ if batch:
     args = parser.parse_args()
     if (args.makefiles == 'makefiles'):
        make_xml = 1 ; # 1 = make files
-       print time_format
-       print "** Write mode - new *.xml files will be written **"
+       print(time_format)
+       print('** Write mode - new *.xml files will be written **')
     elif (args.makefiles == 'report'):
        make_xml = 0 ; # 0 = don't make files, just report
-       print time_format
-       print "** Report mode - no *.xml files will be written **"
+       print(time_format)
+       print('** Report mode - no *.xml files will be written **')
 else:
     make_xml = 1
-    print time_format
-    print "** Non-batch mode - new *.xml files will be written **"
+    print(time_format)
+    print('** Non-batch mode - new *.xml files will be written **')
 
 # Set directories
 host_name = gethostname()
@@ -94,7 +95,7 @@ if host_name in {'crunchy.llnl.gov','oceanonly.llnl.gov'}:
     #cdat_path = sys.executable.replace('python','') ; # Update to system-called python install
     cdat_path = '/usr/local/uvcdat/latest/bin/' ; # Reinstate old "stable" version
 else:
-    print '** HOST UNKNOWN, aborting.. **'
+    print('** HOST UNKNOWN, aborting.. **')
     sys.exit()
 
 # Change directory to host
@@ -118,9 +119,9 @@ out2,err = p.communicate()
 out = ''.join([out1,out2])
 writeToLog(logfile,"".join(['TIME: ',time_format]))
 writeToLog(logfile,"".join(['MASTER PID: ',pypid]))
-print "".join(['master pid',pypid]) ; # Write master PID to sendmail/stdout
+print("".join(['master pid',pypid])) ; # Write master PID to sendmail/stdout
 writeToLog(logfile,"".join(['UV-CDAT: ',sys.executable]))
-print "".join(['UV-CDAT: ',sys.executable]) ; # Write UV-CDAT/python path to sendmail/stdout
+print(''.join(['UV-CDAT: ',sys.executable])) ; # Write UV-CDAT/python path to sendmail/stdout
 writeToLog(logfile,"".join(['HOSTNAME: ',host_name]))
 writeToLog(logfile,"".join(['FUNCTION: ','scandir.walk']))
 writeToLog(logfile,"".join(['SOURCEFILES:\n',out]))
@@ -132,49 +133,49 @@ manager0 = Manager()
 ## Mine for paths and files
 queue1 = manager0.Queue(maxsize=0)
 p1 = Process(target=pathToFile,args=('/p/css03/cmip5_css01/data/cmip5/output1/',start_time,queue1))
-p1.start() ; print "".join(['p1 pid: ',str(p1.ident)])
+p1.start() ; print(''.join(['p1 pid: ',str(p1.ident)]))
 queue2 = manager0.Queue(maxsize=0)
 p2 = Process(target=pathToFile,args=('/p/css03/cmip5_css01/data/cmip5/output2/',start_time,queue2))
-p2.start() ; print "".join(['p2 pid: ',str(p2.ident)])
+p2.start() ; print(''.join(['p2 pid: ',str(p2.ident)]))
 queue3 = manager0.Queue(maxsize=0)
 p3 = Process(target=pathToFile,args=('/p/css03/cmip5_css02/data/cmip5/output1/',start_time,queue3))
-p3.start() ; print "".join(['p3 pid: ',str(p3.ident)])
+p3.start() ; print(''.join(['p3 pid: ',str(p3.ident)]))
 queue4 = manager0.Queue(maxsize=0)
 p4 = Process(target=pathToFile,args=('/p/css03/cmip5_css02/data/cmip5/output2/',start_time,queue4))
-p4.start() ; print "".join(['p4 pid: ',str(p4.ident)])
+p4.start() ; print(''.join(['p4 pid: ',str(p4.ident)]))
 # Plus Jeff's list
 queue5 = manager0.Queue(maxsize=0)
 p5 = Process(target=pathToFile,args=('/p/css03/scratch/cmip5/output1/',start_time,queue5))
-p5.start() ; print "".join(['p5 pid: ',str(p5.ident)])
+p5.start() ; print(''.join(['p5 pid: ',str(p5.ident)]))
 queue6 = manager0.Queue(maxsize=0)
 p6 = Process(target=pathToFile,args=('/p/css03/scratch/published-latest/cmip5/output1/',start_time,queue6))
-p6.start() ; print "".join(['p6 pid: ',str(p6.ident)])
+p6.start() ; print(''.join(['p6 pid: ',str(p6.ident)]))
 queue7 = manager0.Queue(maxsize=0)
 p7 = Process(target=pathToFile,args=('/p/css03/scratch/published-latest/cmip5/cmip5_css01/scratch/cmip5/output1/',start_time,queue7))
-p7.start() ; print "".join(['p7 pid: ',str(p7.ident)])
+p7.start() ; print(''.join(['p7 pid: ',str(p7.ident)]))
 queue8 = manager0.Queue(maxsize=0)
 p8 = Process(target=pathToFile,args=('/p/css03/scratch/published-older/cmip5/output1/',start_time,queue8))
-p8.start() ; print "".join(['p8 pid: ',str(p8.ident)])
+p8.start() ; print(''.join(['p8 pid: ',str(p8.ident)]))
 queue9 = manager0.Queue(maxsize=0)
 p9 = Process(target=pathToFile,args=('/p/css03/scratch/should-publish/cmip5/output1/',start_time,queue9))
-p9.start() ; print "".join(['p9 pid: ',str(p9.ident)])
+p9.start() ; print(''.join(['p9 pid: ',str(p9.ident)]))
 queue10 = manager0.Queue(maxsize=0)
 p10 = Process(target=pathToFile,args=('/p/css03/scratch/unknown-dset/cmip5/output1/',start_time,queue10))
-p10.start() ; print "".join(['p10 pid: ',str(p10.ident)])
+p10.start() ; print(''.join(['p10 pid: ',str(p10.ident)]))
 queue11 = manager0.Queue(maxsize=0)
 p11 = Process(target=pathToFile,args=('/p/css03/scratch/unknown-status/cmip5/output/',start_time,queue11))
-p11.start() ; print "".join(['p11 pid: ',str(p11.ident)])
+p11.start() ; print(''.join(['p11 pid: ',str(p11.ident)]))
 queue12 = manager0.Queue(maxsize=0)
 p12 = Process(target=pathToFile,args=('/p/css03/scratch/unknown-status/cmip5/output1/',start_time,queue12))
-p12.start() ; print "".join(['p12 pid: ',str(p12.ident)])
+p12.start() ; print(''.join(['p12 pid: ',str(p12.ident)]))
 # Jeff new path
 queue13 = manager0.Queue(maxsize=0)
 p13 = Process(target=pathToFile,args=('/p/css03/scratch/obsolete/cmip5/output1/',start_time,queue13))
-p13.start() ; print "".join(['p13 pid: ',str(p13.ident)])
+p13.start() ; print(''.join(['p13 pid: ',str(p13.ident)]))
 # Sasha new publication path
 queue14 = manager0.Queue(maxsize=0)
 p14 = Process(target=pathToFile,args=('/p/css03/esgf_publish/cmip5/output1/',start_time,queue14))
-p14.start() ; print "".join(['p14 pid: ',str(p14.ident)])
+p14.start() ; print(''.join(['p14 pid: ',str(p14.ident)]))
 
 # Consider parallelising css02_scratch in particular - queue object doesn't play with p.map
 '''
@@ -376,7 +377,7 @@ if make_xml:
     PID = replace(PID[-1].split('.')[extIndex],'PID','')
     if checkPID(PID):
         reportStr = ''.join(['** make_cmip5_xml.py run (PID: ',str(PID),') starting, querying for existing previous process **'])
-        print reportStr
+        print(reportStr)
         writeToLog(logfile,reportStr)
         logCount = logCount-1 ; # decrement count by 1
     else:
@@ -392,12 +393,12 @@ if make_xml:
     PID = replace(PID[-1].split('.')[extIndex],'PID','')
     if checkPID(PID):
         reportStr = ''.join(['** previous make_cmip5_xml.py run (PID: ',str(PID),') still active, terminating current process **'])
-        print reportStr
+        print(reportStr)
         writeToLog(logfile,reportStr)
         sys.exit()
     else:
         reportStr = ''.join(['** previous make_cmip5_xml.py run (PID: ',str(PID),') not found, continuing current process **'])
-        print reportStr
+        print(reportStr)
         writeToLog(logfile,reportStr)
 
     del(extIndex,logFiles,logCount,logFile,PID,reportStr) ; gc.collect()
@@ -410,7 +411,7 @@ if make_xml:
     o = glob.glob("".join([host_path,'*/fx/*/*.xml']))
     xml_count2 = len(o)
     xml_count = int(xml_count1)+int(xml_count2);
-    print "".join(['** Updating ',format(xml_count,"1d"),' existing *.xml files **'])
+    print(''.join(['** Updating ',format(xml_count,"1d"),' existing *.xml files **']))
     writeToLog(logfile,"".join(['** Updating ',format(xml_count,"1d"),' existing *.xml files **']))
     # Catch errors with system commands
     cmd = "".join(['rm -rf ',host_path,'*/*/mo_new'])
@@ -425,7 +426,7 @@ if make_xml:
     fnull = open(os.devnull,'w')
     p = call(cmd,stdout=fnull,shell=True)
     fnull.close()
-    print "** Generating new *.xml files **"
+    print('** Generating new *.xml files **')
     writeToLog(logfile,"** Generating new *.xml files **")
     i = 0
 
@@ -514,9 +515,9 @@ if make_xml:
 
     # Create master list of xmlBad and log final to file and console
     xmlBad = xmlBad1+xmlBad2+xmlBad3+xmlBad4+xmlBad5
-    print "".join(['** Complete for \'data\' & \'scratch\' sources; Total outfiles: ',format(len(outfiles),"01d"),' **'])
-    print "".join(['** XML file count - Good: ',format(xmlGood-1,"1d"),' **'])
-    print "".join(['** XML file count - Bad/skipped: ',format(xmlBad-5,"1d"),'; bad1 (cdscan - zero files): ',format(xmlBad1-1,"1d"),'; bad2 (cdscan - warning specified): ',format(xmlBad2-1,"1d"),'; bad3 (read perms): ',format(xmlBad3-1,"1d"),'; bad4 (no outfile): ',format(xmlBad4-1,"1d"),'; bad5 (no infiles): ',format(xmlBad5-1,"1d")])
+    print(''.join(['** Complete for \'data\' & \'scratch\' sources; Total outfiles: ',format(len(outfiles),"01d"),' **']))
+    print(''.join(['** XML file count - Good: ',format(xmlGood-1,"1d"),' **']))
+    print(''.join(['** XML file count - Bad/skipped: ',format(xmlBad-5,"1d"),'; bad1 (cdscan - zero files): ',format(xmlBad1-1,"1d"),'; bad2 (cdscan - warning specified): ',format(xmlBad2-1,"1d"),'; bad3 (read perms): ',format(xmlBad3-1,"1d"),'; bad4 (no outfile): ',format(xmlBad4-1,"1d"),'; bad5 (no infiles): ',format(xmlBad5-1,"1d")]))
     writeToLog(logfile,"".join(['** make_cmip5_xml.py complete for \'data\' & \'scratch\' sources; Total outfiles: ',format(len(outfiles),"01d"),' **']))
     writeToLog(logfile,"".join(['** XML file count - Good: ',format(xmlGood-1,"1d"),' **']))
     writeToLog(logfile,"".join(['** XML file count - Bad/skipped: ',format(xmlBad-5,"1d"),'; bad1 (cdscan - zero files): ',format(xmlBad1-1,"1d"),'; bad2 (cdscan - warning specified): ',format(xmlBad2-1,"1d"),'; bad3 (read perms): ',format(xmlBad3-1,"1d"),'; bad4 (no outfile): ',format(xmlBad4-1,"1d"),'; bad5 (no infiles): ',format(xmlBad5-1,"1d"),' **']))
@@ -533,7 +534,7 @@ if make_xml:
         args = shlex.split(cmd) ; # Create input argument of type list - shell=False requires this, shell=True tokenises (lists) and runs this
         fnull = open(os.devnull,'w')
         #fnull = open("".join([time_format,'_7za.log']),'w') ; # Debug binary being called from script
-        print 'args1:',args
+        print('args1:',args)
         p = call(args,stdout=fnull,shell=False) ; # call runs in the foreground, so script will wait for termination
         fnull.close()
         # Purge old files [durack1@crunchy cmip5]$ rm -rf */*/mo
@@ -570,10 +571,10 @@ if make_xml:
         #[durack1@crunchy cmip5]$ find */*/mo_new -maxdepth 0 -exec sh -c 'mv -f `echo {}` `echo {} | sed s/mo_new/mo/`' \;
         #[durack1@crunchy cmip5]$ ls -d1 */*/mo_new | sed -e 'p;s/mo_new/mo/' | xargs -n 2 mv
         # Report migration success to prompt and log
-        print "".join(['** Archive and migration complete from */*/*_new to */*/*, archive file: ',host_path,'_archive/',time_format,'_cmip5_xml.7z **'])
+        print(''.join(['** Archive and migration complete from */*/*_new to */*/*, archive file: ',host_path,'_archive/',time_format,'_cmip5_xml.7z **']))
         writeToLog(logfile,"".join(['** Archive and migration complete from */*/*_new to */*/*,\n archive file: ',host_path,'_archive/',time_format,'_cmip5_xml.7z **']))
     else:
-        print "".join(['** XML count too low: ',format(xmlGood-1,"1d") ,', archival, purging and migration halted **'])
+        print(''.join(['** XML count too low: ',format(xmlGood-1,"1d") ,', archival, purging and migration halted **']))
         writeToLog(logfile,"".join(['** XML count too low: ',format(xmlGood-1,"1d") ,', archival, purging and migration halted **']))
 
     # Run complete, now compress logfile
@@ -586,5 +587,5 @@ if make_xml:
     os.remove(logfile)
 
 else:
-    print "** make_cmip5_xml.py run in report mode **"
+    print('** make_cmip5_xml.py run in report mode **')
     writeToLog(logfile,"** make_cmip5_xml.py run in report mode **")
