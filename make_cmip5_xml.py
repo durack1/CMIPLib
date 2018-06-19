@@ -79,6 +79,8 @@ PJD  8 Nov 2017     - Added dissic, ph to variable lists (Steve P requested)
 PJD  8 Nov 2017     - Added durolib path append
 PJD 22 Feb 2018     - Update to point at CSS03 mounts
 PJD  9 Apr 2018     - Updated to point to all CSS03 mounts (Jeff's list)
+PJD 22 May 2018     - Added new path, following Jeff update
+PJD 31 May 2018     - Added new path, following Sasha update
                     - TODO:
                     Add check to ensure CSS/GDO systems are online, if not abort - use sysCallTimeout function
                     sysCallTimeout(['ls','/cmip5_gdo2/'],5.) ; http://stackoverflow.com/questions/13685239/check-in-python-script-if-nfs-server-is-mounted-and-online
@@ -671,6 +673,14 @@ p11.start() ; print "".join(['p11 pid: ',str(p11.ident)])
 queue12 = manager0.Queue(maxsize=0)
 p12 = Process(target=pathToFile,args=('/p/css03/scratch/unknown-status/cmip5/output1/',start_time,queue12))
 p12.start() ; print "".join(['p12 pid: ',str(p12.ident)])
+# Jeff new path
+queue13 = manager0.Queue(maxsize=0)
+p13 = Process(target=pathToFile,args=('/p/css03/scratch/obsolete/cmip5/output1/',start_time,queue13))
+p13.start() ; print "".join(['p13 pid: ',str(p13.ident)])
+# Sasha new publication path
+queue14 = manager0.Queue(maxsize=0)
+p14 = Process(target=pathToFile,args=('/p/css03/esgf_publish/cmip5/output1/',start_time,queue14))
+p14.start() ; print "".join(['p14 pid: ',str(p14.ident)])
 
 # Consider parallelising css02_scratch in particular - queue object doesn't play with p.map
 '''
@@ -746,6 +756,12 @@ logWrite(logfile,time_since_start,'scratch/unknown-status/cmip5/output/',i1,p11_
 p12.join()
 [p12_outfiles,p12_outfiles_paths,time_since_start,i1,i2,len_vars] = queue12.get_nowait()
 logWrite(logfile,time_since_start,'scratch/unknown-status/cmip5/output1/',i1,p12_outfiles,len_vars)
+p13.join()
+[p13_outfiles,p13_outfiles_paths,time_since_start,i1,i2,len_vars] = queue13.get_nowait()
+logWrite(logfile,time_since_start,'scratch/obsolete/cmip5/output1/',i1,p13_outfiles,len_vars)
+p14.join()
+[p14_outfiles,p14_outfiles_paths,time_since_start,i1,i2,len_vars] = queue14.get_nowait()
+logWrite(logfile,time_since_start,'esgf_publish/cmip5/output1/',i1,p14_outfiles,len_vars)
 
 # Generate master lists from sublists
 outfiles_paths = list(p1_outfiles_paths)
@@ -760,6 +776,8 @@ outfiles_paths.extend(p9_outfiles_paths)
 outfiles_paths.extend(p10_outfiles_paths)
 outfiles_paths.extend(p11_outfiles_paths)
 outfiles_paths.extend(p12_outfiles_paths)
+outfiles_paths.extend(p13_outfiles_paths)
+outfiles_paths.extend(p14_outfiles_paths)
 
 outfiles = list(p1_outfiles)
 outfiles.extend(p2_outfiles)
@@ -773,6 +791,8 @@ outfiles.extend(p9_outfiles)
 outfiles.extend(p10_outfiles)
 outfiles.extend(p11_outfiles)
 outfiles.extend(p12_outfiles)
+outfiles.extend(p13_outfiles)
+outfiles.extend(p14_outfiles)
 
 # Sort lists by outfiles
 outfilesAndPaths = zip(outfiles,outfiles_paths)
@@ -1021,6 +1041,7 @@ if make_xml:
         args = shlex.split(cmd) ; # Create input argument of type list - shell=False requires this, shell=True tokenises (lists) and runs this
         fnull = open(os.devnull,'w')
         #fnull = open("".join([time_format,'_7za.log']),'w') ; # Debug binary being called from script
+        print 'args1:',args
         p = call(args,stdout=fnull,shell=False) ; # call runs in the foreground, so script will wait for termination
         fnull.close()
         # Purge old files [durack1@crunchy cmip5]$ rm -rf */*/mo
