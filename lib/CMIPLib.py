@@ -113,119 +113,6 @@ def process_path(path):
         product = []
     return validPath, variable, version, realization, cmipTable, realm, tfreq, experiment, model, institute, product
 
-# def updateSqlDb(path):
-#     '''
-#     updateSqlDb(parent, keyword_arguments)
-
-#     function takes in a parent directory (e.g., /path/to/cmipData/output1/) and will parse
-#     all available data and update an underlying MySQL database with data path information.
-
-#     Functionality depends on specific directory structure:
-#         /product/institute/model/experiment/time_frequency/realm/cmip_table/realization/version/variable
-#         or
-#         /product/institute/model/experiment/time_frequency/realm/cmip_table/realization/variable/version
-
-#     keyword_arguments:
-#         Keyword     Type    Purpose
-#         variables   list    Specify list of variables to parse
-#     '''
-#     # create database connection
-#     conn = MySQLdb.connect(host=sqlcfg.mysql_server, user=sqlcfg.mysql_user, password=sqlcfg.mysql_password, database=sqlcfg.mysql_database)
-#     c = conn.cursor()
-
-#     # get existing paths
-#     print('Getting existing directories under: ' + path)
-#     query = 'select * from paths where path like \'' + path + '%\';'
-#     c.execute(query)
-#     a = c.fetchall()
-#     a = np.array(a)
-#     if len(a) > 0:
-#         pexist = list(a[:,1])
-#         modTime = list(a[:,13])
-#         pathLookup = dict(zip(pexist, modTime))
-#         del a, pexist, modTime, query
-#     else:
-#         pathLookup = {'',''}
-
-#     # lists for previously undocumented directories
-#     new_paths = []
-#     new_ctimes = []
-#     new_mtimes = []
-#     new_atimes = []
-#     # lists for directories with updated timestamps
-#     update_paths = []
-#     update_ctimes = []
-#     update_mtimes = []
-#     update_atimes = []
-
-#     # get scan iterator
-#     x = scantree(path)
-#     # iterate over directories to see if they need to be stored
-#     last = ''
-#     for i, d in enumerate(x):
-#         # get file path
-#         file_path = d.path.split(d.name)[0]
-#         # check if the directory is unique in iterator
-#         if file_path != last:
-#             last = file_path
-#             # check if directory is in database
-#             # else check time stamp and add to list if it is new
-#             if file_path not in pathLookup:
-#                 try:
-#                     new_paths.append(file_path)
-#                     new_ctimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(d.stat().st_ctime)))
-#                     new_mtimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(d.stat().st_mtime)))
-#                     new_atimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(d.stat().st_atime)))
-#                 except:
-#                     print('Error accessing ' + file_path)
-#             else:
-#                 oldModTime = str(pathLookup[file_path])
-#                 oldModTime = strToDatetime(oldModTime)+datetime.timedelta(seconds=1) # add 1s to account for ms precision on file system
-#                 newModTime = datetime.datetime.utcfromtimestamp(d.stat().st_mtime)
-#                 if newModTime > oldModTime:
-#                     update_paths.append(file_path)
-#                     update_ctimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(d.stat().st_ctime)))
-#                     update_mtimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(d.stat().st_mtime)))
-#                     update_atimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(d.stat().st_atime)))
-
-#     print('Found ' + str(len(update_paths) + len(new_paths)) + ' directories')
-#     # write out new paths to database
-#     x = list(zip(new_paths,new_mtimes,new_ctimes,new_atimes))
-#     outputList = []
-#     for path, mtime, ctime, atime in x:
-#         validPath, variable, version, realization, cmipTable, realm, tfreq, experiment, model, institute, product = process_path(path)
-#         if validPath:
-#             litem = [path, product, institute, model, experiment, tfreq, realm, cmipTable, realization, version, variable, ctime, mtime, atime, '0', None]
-#             outputList.append(litem)
-#     q = """ INSERT INTO paths (
-#             path, product, institute, model, experiment, tfreq, realm, cmipTable, realization, version, variable, created, modified, accessed, retired, retire_datetime)
-#             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-#         """
-#     if len(outputList) > 0:
-#         c.executemany(q, outputList)
-#         conn.commit()
-
-#     print('Wrote out ' + str(len(outputList)) + ' new directories to DB')
-
-#     # write out modified paths to database
-#     x = list(zip(update_paths,update_mtimes,update_ctimes,update_atimes))
-#     outputList = []
-#     for path, mtime, ctime, atime in x:
-#         litem = [ctime, mtime, atime, '0', None, path]
-#         outputList.append(litem)
-#     q = """ UPDATE paths
-#             SET created=%s, modified=%s, accessed=%s, retired=%s, retire_datetime=%s
-#             WHERE path=%s;
-#         """
-#     if len(outputList) > 0:
-#         c.executemany(q, outputList)
-#         conn.commit()
-
-#     print('Updated ' + str(len(outputList)) + ' directories in DB')
-
-#     # close db connection
-#     conn.close()
-
 def updateSqlDb(path):
     '''
     updateSqlDb(parent, keyword_arguments)
@@ -281,21 +168,21 @@ def updateSqlDb(path):
             try:
                 new_paths.append(file_path)
                 ts = scandir.stat(file_path)
-                new_ctimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(ts.st_ctime)))
-                new_mtimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(ts.st_mtime)))
-                new_atimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(ts.st_atime)))
+                new_ctimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_ctime)))
+                new_mtimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_mtime)))
+                new_atimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_atime)))
             except:
                 print('Error accessing ' + file_path)
         else:
             oldModTime = str(pathLookup[file_path])
             oldModTime = strToDatetime(oldModTime)+datetime.timedelta(seconds=1) # add 1s to account for ms precision on file system
             ts = scandir.stat(file_path)
-            newModTime = datetime.datetime.utcfromtimestamp(ts.st_mtime)
+            newModTime = datetime.datetime.fromtimestamp(ts.st_mtime)
             if newModTime > oldModTime:
                 update_paths.append(file_path)
-                update_ctimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(ts.st_ctime)))
-                update_mtimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(ts.st_mtime)))
-                update_atimes.append(toSQLtime(datetime.datetime.utcfromtimestamp(ts.st_atime)))
+                update_ctimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_ctime)))
+                update_mtimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_mtime)))
+                update_atimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_atime)))
 
     print('Found ' + str(len(update_paths) + len(new_paths)) + ' new/modified directories')
     # write out new paths to database
@@ -312,7 +199,7 @@ def updateSqlDb(path):
         """
     if len(outputList) > 0:
         c.executemany(q, outputList)
-        conn.commit()
+        conn.commit()    
 
     print('Wrote out ' + str(len(outputList)) + ' new directories to DB')
 
@@ -334,6 +221,13 @@ def updateSqlDb(path):
 
     # close db connection
     conn.close()
+
+def xmlWriteDev(inpath, outfile):
+    cmd = 'cdscan -x ' + outfile + ' ' + inpath + '/*.nc'
+    p = Popen(cmd,shell=True,stdout=PIPE,stderr=PIPE)
+    out,err = p.communicate() 
+    # subprocess.call(args, *, stdin=None, stdout=None, stderr=None, shell=False)
+    return out, err    
 
 def getScanList(**kwargs):
     '''
@@ -379,6 +273,17 @@ def getScanList(**kwargs):
     conn.commit()
     conn.close()
     return paths
+
+def sqlQuery(query):
+    # create database connection
+    conn = MySQLdb.connect(host=sqlcfg.mysql_server, user=sqlcfg.mysql_user, password=sqlcfg.mysql_password, database=sqlcfg.mysql_database)
+    c = conn.cursor()
+
+    c.execute(query)
+    queryResult = c.fetchall()
+    queryResult = np.array(queryResult)
+
+    return queryResult
 
 def updateSqlCdScan(full_path, xmlFile, xmlwriteDatetime, error):
     '''

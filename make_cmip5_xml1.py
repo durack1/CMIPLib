@@ -42,9 +42,8 @@ PJD 19 Jun 2018     - Updated all print functions for python3
 """
 from __future__ import print_function ; # Python2->3 conversion
 import argparse,cPickle,datetime,gc,glob,gzip,os,shlex,sys,time
-sys.path.append('/export/durack1/git/CMIPLib/lib/')
+sys.path.append('lib/')
 from CMIPLib import checkPID,logWrite,pathToFile,xmlLog,xmlWrite
-sys.path.append('/export/durack1/git/durolib/lib/')
 from durolib import mkDirNoOSErr,writeToLog #sysCallTimeout
 from multiprocessing import Process,Manager
 from socket import gethostname
