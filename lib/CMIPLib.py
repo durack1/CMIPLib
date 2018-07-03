@@ -15,6 +15,7 @@ Paul J. Durack and Stephen Po-Chedley 11th April 2018
 @authors: durack1, @pochedley1
 """
 
+from __future__ import print_function ; # Python2->3 conversion
 import datetime
 import gc
 import MySQLdb #pip install mysqlclient; (cdat80py2) bash-4.1$ conda install -c carta mysqlclient
@@ -26,9 +27,8 @@ sys.path.append('config/')
 import scandir
 import sql_cmip5_config as sqlcfg
 import time
-from durolib import mkDirNoOSErr,writeToLog
+import errno
 from glob import glob
-from string import replace
 from subprocess import Popen,PIPE
 
 def scantree(path):
@@ -339,7 +339,7 @@ def checkPID(pid):
 
 #%%
 def keepFile(outfileName,errStr):
-    outfileNameNew = replace(outfileName,'.latestX.xml',''.join(['.latestX.WARN',str(errStr),'.xml']))
+    outfileNameNew = outfileName.replace('.latestX.xml',''.join(['.latestX.WARN',str(errStr),'.xml']))
     if os.path.isfile(outfileName):
         os.rename(outfileName,outfileNameNew)
 
@@ -347,7 +347,7 @@ def keepFile(outfileName,errStr):
 def logWrite(logfile,time_since_start,path_name,i1,data_outfiles,len_vars):
     outfile_count = len(data_outfiles)
     time_since_start_s = '%09.2f' % time_since_start
-    print "".join([path_name.ljust(13),' scan complete.. ',format(i1,"1d").ljust(6),' paths total; ',str(outfile_count).ljust(6),' output files to be written (',format(len_vars,"1d").ljust(3),' vars sampled)'])
+    print("".join([path_name.ljust(13),' scan complete.. ',format(i1,"1d").ljust(6),' paths total; ',str(outfile_count).ljust(6),' output files to be written (',format(len_vars,"1d").ljust(3),' vars sampled)']))
     writeToLog(logfile,"".join([time_since_start_s,' : ',path_name.ljust(13),' scan complete.. ',format(i1,"1d").ljust(6),' paths total; ',format(outfile_count,"1d").ljust(6),' output files to be written (',format(len_vars,"1d").ljust(3),' vars sampled)']))
     return
 
@@ -377,7 +377,7 @@ def pathToFile(inpath,start_time,queue1):
         if re.search(r'bad[0-9]',path):
             continue ; #print 're.search',path
         if '-will-delete' in path:
-            print '-will-delete',path
+            print('-will-delete',path)
             continue
         # Iterate and purge bad[0-9] subdirs
         for dirCount,el in reversed(list(enumerate(dirs))):
@@ -443,7 +443,7 @@ def pathToFile(inpath,start_time,queue1):
         if re.search(ProductTest,path_bits[CMIPIndex+1]):
             DRSStartIndex = CMIPIndex+2
         else:
-            print path_bits
+            print(path_bits)
         # Use indices to build output filenames
         try:
             #institute   = path_bits[DRSStartIndex]
@@ -490,7 +490,7 @@ def pathToFile(inpath,start_time,queue1):
                 lateststr = 'latestX' ; #lateststr = 'latest1' ; # Latest
             else:
                 lateststr = 'latest0' ; # Not latest
-        except Exception,err:
+        except Exception as err:
             # Case HadGEM2-AO - attempt to recover data
             if 'HadGEM2-AO' in model and experiment in ['historical','rcp26','rcp45','rcp60','rcp85']:
                 variable    = path_bits[pathIndex+8]
@@ -509,7 +509,7 @@ def pathToFile(inpath,start_time,queue1):
             elif 'BESM-OA2-3' in model and 'decadal' in experiment:
                 continue
             else:
-                print 'pathToFile - Exception:',err,path
+                print('pathToFile - Exception:',err,path)
                 continue
         # Test for list entry and trim experiments and variables to manageable list
         if (experiment in experiments) and (time_ax in temporal) and (variable in list_vars):
@@ -603,7 +603,7 @@ def xmlLog(logFile,fileZero,fileWarning,fileNoWrite,fileNoRead,fileNone,errorCod
             err_text = ' PROBLEM 1 (cdscan error - zero infile size) indexing '
         writeToLog(logFile,"".join(['** ',format(xmlBad1,"07d"),' ',logtime_format,' ',time_since_start_s,'s',err_text,inpath,' **']))
         if batchPrint:
-            print "".join(['**',err_text,inpath,' **'])
+            print("".join(['**',err_text,inpath,' **']))
         xmlBad1 = xmlBad1 + 1;
         # Rename problem files
         keepFile(outfileName,1)
@@ -615,7 +615,7 @@ def xmlLog(logFile,fileZero,fileWarning,fileNoWrite,fileNoRead,fileNone,errorCod
             err_text = "".join([' PROBLEM 2 (cdscan error - \'',errorCode,'\') indexing '])
         writeToLog(logFile,"".join(['** ',format(xmlBad2,"07d"),' ',logtime_format,' ',time_since_start_s,'s',err_text,inpath,' **']))
         if batchPrint:
-            print "".join(['**',err_text,inpath,' **'])
+            print("".join(['**',err_text,inpath,' **']))
         xmlBad2 = xmlBad2 + 1;
         # Rename problem files
         keepFile(outfileName,2)
@@ -627,7 +627,7 @@ def xmlLog(logFile,fileZero,fileWarning,fileNoWrite,fileNoRead,fileNone,errorCod
             err_text = ' PROBLEM 3 (read perms) indexing '
         writeToLog(logFile,"".join(['** ',format(xmlBad3,"07d"),' ',logtime_format,' ',time_since_start_s,'s',err_text,inpath,' **']))
         if batchPrint:
-            print "".join(['**',err_text,inpath,' **'])
+            print("".join(['**',err_text,inpath,' **']))
         xmlBad3 = xmlBad3 + 1;
         # Rename problem files
         keepFile(outfileName,3)
@@ -639,7 +639,7 @@ def xmlLog(logFile,fileZero,fileWarning,fileNoWrite,fileNoRead,fileNone,errorCod
             err_text = ' PROBLEM 4 (no outfile) indexing '
         writeToLog(logFile,"".join(['** ',format(xmlBad4,"07d"),' ',logtime_format,' ',time_since_start_s,'s',err_text,inpath,' **']))
         if batchPrint:
-            print "".join(['**',err_text,inpath,' **'])
+            print("".join(['**',err_text,inpath,' **']))
         xmlBad4 = xmlBad4 + 1;
         # Rename problem files
         keepFile(outfileName,4)
@@ -651,7 +651,7 @@ def xmlLog(logFile,fileZero,fileWarning,fileNoWrite,fileNoRead,fileNone,errorCod
             err_text = ' PROBLEM 5 (no infiles) indexing '
         writeToLog(logFile,"".join(['** ',format(xmlBad5,"07d"),' ',logtime_format,' ',time_since_start_s,'s',err_text,inpath,' **']))
         if batchPrint:
-            print "".join(['**',err_text,inpath,' **'])
+            print("".join(['**',err_text,inpath,' **']))
         xmlBad5 = xmlBad5 + 1;
         # Rename problem files
         keepFile(outfileName,5)
@@ -688,15 +688,15 @@ def xmlWrite(inpath,outfile,host_path,cdat_path,start_time,queue1):
         out_path = os.path.join(experiment,realm,temporal,variable)
 
     outfileName = os.path.join(host_path,out_path,"".join(outfile))
-    outfileName = replace(outfileName,'.mon.','.mo.') ; # Fix mon -> mo
+    outfileName = outfileName.replace('.mon.','.mo.')
     if not os.path.exists(os.path.join(host_path,out_path)):
         # At first run create output directories
         try:
             #os.makedirs(os.path.join(host_path,out_path))
             mkDirNoOSErr(os.path.join(host_path,out_path)) ; # Alternative call - don't crash if directory exists
-        except Exception,err:
-            print 'xmlWrite - Exception:',err
-            print "".join(['** Crash while trying to create a new directory: ',os.path.join(host_path,out_path)])
+        except Exception as err:
+            print('xmlWrite - Exception:',err)
+            print("".join(['** Crash while trying to create a new directory: ',os.path.join(host_path,out_path)]))
 
     if os.path.isfile(outfileName):
         os.remove(outfileName)
@@ -763,3 +763,60 @@ def xmlWrite(inpath,outfile,host_path,cdat_path,start_time,queue1):
     #return(inpath,outfileName,fileZero,fileWarning,fileNoRead,fileNoWrite,fileNone,errorCode,time_since_start) ; Non-parallel version of code
     queue1.put_nowait([inpath,outfileName,fileZero,fileWarning,fileNoRead,fileNoWrite,fileNone,errorCode,time_since_start]) ; # Queue
     return
+
+#%%
+def writeToLog(logFilePath,textToWrite):
+    """
+    Documentation for writeToLog(logFilePath,textToWrite):
+    -------
+    The writeToLog() function writes specified text to a text log file
+
+    Author: Paul J. Durack : pauldurack@llnl.gov
+
+    Usage:
+    ------
+        >>> from durolib import writeToLog
+        >>> writeToLog(~/somefile.txt,'text to write to log file')
+
+    Notes:
+    -----
+        Current version appends a new line after each call to the function.
+        File will be created if it doesn't already exist, otherwise new text
+        will be appended to an existing log file.
+    """
+    if os.path.isfile(logFilePath):
+        logHandle = open(logFilePath,'a') ; # Open to append
+    else:
+        logHandle = open(logFilePath,'w') ; # Open to write
+    logHandle.write("".join([textToWrite,'\n']))
+    logHandle.close()
+
+#%%
+def mkDirNoOSErr(newdir,mode=0o777):
+    """
+    Documentation for mkDirNoOSErr(newdir,mode=0777):
+    -------
+    The mkDirNoOSErr() function mimics os.makedirs however does not fail if the directory already
+    exists
+
+    Author: Paul J. Durack : pauldurack@llnl.gov
+
+    Returns:
+    -------
+           Nothing.
+    Usage:
+    ------
+        >>> from durolib import mkDirNoOSErr
+        >>> mkDirNoOSErr('newPath',mode=0777)
+
+    Notes:
+    -----
+    """
+    try:
+        os.makedirs(newdir,mode)
+    except OSError as err:
+        #Re-raise the error unless it's about an already existing directory
+        if err.errno != errno.EEXIST or not os.path.isdir(newdir):
+            raise
+
+

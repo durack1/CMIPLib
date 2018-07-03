@@ -82,7 +82,7 @@ else:
 
 # Set directories
 host_name = gethostname()
-if host_name in {'crunchy.llnl.gov','oceanonly.llnl.gov'}:
+if host_name in {'crunchy.llnl.gov','oceanonly.llnl.gov','grim.llnl.gov'}:
     trim_host = replace(host_name,'.llnl.gov','')
     if batch:
         #host_path = '/work/cmip5/' ; # BATCH MODE - oceanonly 130605
@@ -507,7 +507,7 @@ if make_xml:
         time_since_starts,inpaths,outfileNames,fileZeros,fileWarnings,fileNoReads,fileNoWrites,fileNones,errorCodes = zip(*tmp)
         # Loop through inputs and log
         for n in range(threads):
-            [xmlBad1,xmlBad2,xmlBad3,xmlBad4,xmlBad5,xmlGood] = xmlLog(logfile,fileZeros[n],fileWarnings[n],fileNoWrites[n],fileNoReads[n],fileNones[n],errorCodes[n],inpaths[n],outfileNames[n],time_since_starts[n],(i+n),xmlBad1,xmlBad2,xmlBad3,xmlBad4,xmlBad5,xmlGood)
+            [xmlBad1,xmlBad2,xmlBad3,xmlBad4,xmlBad5,xmlGood] = xmlLog(logfile,fileZeros[n],fileWarnings[n],fileNoWrites[n],fileNoReads[n],fileNones[n],errorCodes[n], batch_print, inpaths[n],outfileNames[n],time_since_starts[n],(i+n),xmlBad1,xmlBad2,xmlBad3,xmlBad4,xmlBad5,xmlGood)
 
         # Increment counter
         i = i + threads
