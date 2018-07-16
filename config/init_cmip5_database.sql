@@ -13,3 +13,6 @@ retired TINYINT, retire_datetime DATETIME, PRIMARY KEY(pid));
 -- example user + permissions
 -- CREATE USER 'newuser'@'localhost' IDENTIFIED BY 'password';
 -- GRANT ALL PRIVILEGES ON cmip5.* TO 'newuser'@'localhost';
+
+-- probably not needed: set global max_allowed_packet=67108864;
+-- /etc/init.d/mysqld restart

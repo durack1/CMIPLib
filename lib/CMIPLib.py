@@ -12,13 +12,15 @@ Paul J. Durack and Stephen Po-Chedley 11th April 2018
 |  PJD 19 Jun 2018  - Updated with functions from make_cmip5_xml1.py
 |  PJD 19 2018       - Updated to use conda mysqlclient
 
+## conda create -n cdat8 -c conda-forge -c cdat python=3.6 cdat mesalib joblib mysql-connector-python scandir
+
 @authors: durack1, @pochedley1
 """
 
 from __future__ import print_function ; # Python2->3 conversion
 import datetime
 import gc
-import MySQLdb #pip install mysqlclient; (cdat80py2) bash-4.1$ conda install -c carta mysqlclient
+import mysql.connector as MySQLdb #pip install mysqlclient; or conda install mysql-connector-python or conda install mysql-python + pip install mysql-connector-python-rf (py2) or (cdat80py2) bash-4.1$ conda install -c carta mysqlclient
 import numpy as np
 import os
 import re
@@ -61,9 +63,9 @@ def strToDatetime(time):
     time = datetime.datetime(year,month,day,hour,minute,second)
     return time
 
-def process_path(path):
+def parsePath(path):
     '''
-    process_path(path):
+    parsePath(path):
 
     function takes a path and infers the metadata (e.g., variable, version, model, etc.)
 
@@ -73,10 +75,16 @@ def process_path(path):
     '''
     meta = path.split('/')[1:-1]
     validPath = True
+    # remove double versions
+    if meta[-2] == meta[-3]:
+        meta.pop(-2)
     e = path.split('/')[-2]
-    if ((e == 'bad0') | (e == 'bad1')):
-        meta = meta[0:-1]
-    if (len(meta) > 10):
+    bad = re.compile('bad[0-9]{1}')
+    check = re.match(bad, e)
+    checkBad = True
+    if check != None:
+        checkBad = False
+    if ((len(meta) > 10) & (checkBad)):
         if ((meta[-1] != '1') & (meta[-1] != '2')):
             variable = meta[-1]
             version = meta[-2]
@@ -111,6 +119,7 @@ def process_path(path):
         model = []
         institute = []
         product = []
+
     return validPath, variable, version, realization, cmipTable, realm, tfreq, experiment, model, institute, product
 
 def updateSqlDb(path):
@@ -171,7 +180,7 @@ def updateSqlDb(path):
                 new_ctimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_ctime)))
                 new_mtimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_mtime)))
                 new_atimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_atime)))
-            except:
+            except OSError:
                 print('Error accessing ' + file_path)
         else:
             oldModTime = str(pathLookup[file_path])
@@ -189,7 +198,7 @@ def updateSqlDb(path):
     x = list(zip(new_paths,new_mtimes,new_ctimes,new_atimes))
     outputList = []
     for path, mtime, ctime, atime in x:
-        validPath, variable, version, realization, cmipTable, realm, tfreq, experiment, model, institute, product = process_path(path)
+        validPath, variable, version, realization, cmipTable, realm, tfreq, experiment, model, institute, product = parsePath(path)
         if validPath:
             litem = [path, product, institute, model, experiment, tfreq, realm, cmipTable, realization, version, variable, ctime, mtime, atime, '0', None]
             outputList.append(litem)
@@ -198,8 +207,16 @@ def updateSqlDb(path):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
         """
     if len(outputList) > 0:
-        c.executemany(q, outputList)
-        conn.commit()    
+        # write out in chunks of 1000
+        if len(outputList) > 1000:
+            for i in range(int(np.ceil(len(outputList)/1000))):
+                ro = outputList[i*1000:i*1000+1000]
+                c.executemany(q, ro)
+                conn.commit()      
+        else:  
+            c.executemany(q, outputList)
+            conn.commit()      
+
 
     print('Wrote out ' + str(len(outputList)) + ' new directories to DB')
 
@@ -214,8 +231,15 @@ def updateSqlDb(path):
             WHERE path=%s;
         """
     if len(outputList) > 0:
-        c.executemany(q, outputList)
-        conn.commit()
+        # write out in chunks of 1000
+        if len(outputList) > 1000:
+            for i in range(int(np.ceil(len(outputList)/1000))):
+                ro = outputList[i*1000:i*1000+1000]
+                c.executemany(q, ro)
+                conn.commit()      
+        else:  
+            c.executemany(q, outputList)
+            conn.commit()      
 
     print('Updated ' + str(len(outputList)) + ' directories in DB')
 
@@ -224,10 +248,124 @@ def updateSqlDb(path):
 
 def xmlWriteDev(inpath, outfile):
     cmd = 'cdscan -x ' + outfile + ' ' + inpath + '/*.nc'
+    cmd = cmd.replace('//', '/')
     p = Popen(cmd,shell=True,stdout=PIPE,stderr=PIPE)
     out,err = p.communicate() 
     # subprocess.call(args, *, stdin=None, stdout=None, stderr=None, shell=False)
-    return out, err    
+    return out, err  
+
+
+def findInList(keyString, list):
+    """find_in_list(keyString, list)
+
+    Intended to subset file lists for keywords. Pass in a list of
+    file names (list) and a string (keyString) and the function 
+    returns a subsetted list. 
+
+    Example: 
+
+    # Get a list of xmls for a particular model (CCSM4)
+    model_list = find_in_list('CCSM4', xml_list)
+
+    """
+    outList = [s for s in list if keyString in s]
+    return outList; 
+
+def process_path(xmlOutputDir, inpath):
+    # parse path
+    validPath, variable, version, realization, cmipTable, realm, tfreq, experiment, model, institute, product = parsePath(inpath)
+    if validPath:
+        # output filename
+        if tfreq == 'fx':
+            outfile = xmlOutputDir + '/fx/' + variable + '/cmip5.' + model + '.' + experiment + '.' + realization + '.' + tfreq + '.' + realm + '.' + cmipTable + '.' + variable + '.000000.' + version + '.0.xml'
+        else:    
+            outfile = xmlOutputDir + '/' + experiment + '/' + realm + '/' + tfreq + '/' + variable + '/cmip5.' + model + '.' + experiment + '.' + realization + '.' + tfreq + '.' + realm + '.' + cmipTable + '.' + variable + '.000000.' + version + '.0.xml'
+        outfile = outfile.replace('//','/')
+        # check if written already
+        ef = glob(outfile.replace('.000000.','.*.').replace('.0.xml','.*.xml'))
+        if len(ef) == 0:
+            ensure_dir(outfile)
+            # create xml
+            out,err = xmlWriteDev(inpath, outfile)
+            # parse errors
+            xmlwrite = toSQLtime(datetime.datetime.now())
+            if not os.path.exists(outfile):
+                if str(err).find('CDMS I/O error: End of file') >= 0:
+                    updateSqlCdScan(inpath, None, xmlwrite, 'No write: CDMS I/O Error')
+                elif str(err).find('RuntimeError: Dimension time in files') >= 0:
+                    updateSqlCdScan(inpath, None, xmlwrite, 'No write: File dimension inconsistency')
+                elif str(err).find('CDMS I/O error: Determining type of file') >= 0:
+                    updateSqlCdScan(inpath, None, xmlwrite, 'No write: CDMS Filetype determination issue')
+                elif str(err).find('Cannot allocate memory') >= 0:
+                    updateSqlCdScan(inpath, None, xmlwrite, 'No write: Memory allocation problem')                                        
+                else:    
+                    updateSqlCdScan(inpath, None, xmlwrite, 'No write')
+            else:
+                errors = getWarnings(str(err))
+                if len(errors) > 0:
+                    errorCode = parseWarnings(errors)
+                    outfileNew = outfile.replace('000000',errorCode)
+                    os.rename(outfile,outfileNew)
+                    outfile = outfileNew
+                    if len(errors) > 255:
+                        errors = errors[0:255]
+                # update database with xml write
+                updateSqlCdScan(inpath, outfile, xmlwrite, errors)
+        else:
+            q = 'select path from paths where xmlFile = \'' + ef[0] + '\';'
+            queryResult = sqlQuery(q)
+            # if the existing xmlFile is not related to the input path
+            # then state there is an existing xml link
+            # else populate the current writetime
+            xmlwrite = toSQLtime(datetime.datetime.now())
+            if len(queryResult) > 0:
+                if len(findInList(inpath, queryResult[0])) == 0:   
+                    # update database with xml write
+                    updateSqlCdScan(inpath, None, xmlwrite, 'Existing xml link')
+            else:
+                updateSqlCdScan(inpath, ef[0], xmlwrite, 'Orphan xml')
+
+
+def ensure_dir(file_path):
+    directory = os.path.dirname(file_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)      
+
+#%%
+def getWarnings(err):
+    errstart = err.find('Warning') ; # Indexing returns value for "W" of warning
+    err1 = err.find(' to: [')
+    if err1 == -1: err1 = len(err)-1 ; # Warning resetting axis time values
+    err2 = err.find(': [')
+    if err2 == -1: err2 = len(err)-1 ; # Problem 2 - cdscan error - Warning: axis values for axis time are not monotonic: [
+    err3 = err.find(':  [')
+    if err3 == -1: err3 = len(err)-1 ; # Problem 2 - cdscan error - Warning: resetting latitude values:  [
+    err4 = err.find(') ')
+    if err4 == -1: err4 = len(err)-1 ; # Problem 1 - zero infile size ; Problem 4 - no outfile
+    err5 = err.find(', value=')
+    if err5 == -1: err5 = len(err)-1 ; # Problem 2 - cdscan error - 'Warning, file XXXX, dimension time overlaps file
+    errorCode = err[errstart:min(err1,err2,err3,err4,err5)]
+
+    errPython = err.find('Traceback (most recent call last)')
+    if errPython > 0:
+        errorCode = errorCode + 'Python Error'
+    
+    return errorCode
+
+def parseWarnings(err):
+    errorCode = list('00000')
+    if err.find('dimension time contains values in file') >= 0:
+        errorCode[0] = '1'
+    if err.find('Warning: Axis values for axis time are not monotonic') >= 0:
+        errorCode[1] = '1'
+    if err.find('Warning: resetting latitude values') >= 0:
+        errorCode[2] = '1'
+    if err.find('zero infile size') >= 0:
+        errorCode[3] = '1'                        
+    if err.find('dimension time overlaps file') >= 0:
+        errorCode[4] = '1'
+    errorCode = "".join(errorCode)        
+    return errorCode
 
 def getScanList(**kwargs):
     '''
@@ -282,6 +420,7 @@ def sqlQuery(query):
     c.execute(query)
     queryResult = c.fetchall()
     queryResult = np.array(queryResult)
+    conn.close()
 
     return queryResult
 
