@@ -289,8 +289,18 @@ def process_path(xmlOutputDir, inpath):
             out,err = xmlWriteDev(inpath, outfile)
             # parse errors
             xmlwrite = toSQLtime(datetime.datetime.now())
+            # check for zero sized files
+            zeroSize = False
             if not os.path.exists(outfile):
-                if str(err).find('CDMS I/O error: End of file') >= 0:
+                fiter = glob(inpath + '/*.nc')
+                for fn in fiter:
+                    fsize = os.path.getsize(fn)
+                    if fsize == 0:
+                        zeroSize = True
+                        break
+                if zeroSize:
+                    updateSqlCdScan(inpath, None, xmlwrite, 'No write: filesize of zero')
+                elif str(err).find('CDMS I/O error: End of file') >= 0:
                     updateSqlCdScan(inpath, None, xmlwrite, 'No write: CDMS I/O Error')
                 elif str(err).find('RuntimeError: Dimension time in files') >= 0:
                     updateSqlCdScan(inpath, None, xmlwrite, 'No write: File dimension inconsistency')
