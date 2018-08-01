@@ -14,6 +14,7 @@ PJD  9 Apr 2018     - Updated to point to all CSS03 mounts (Jeff's list)
 PJD 22 May 2018     - Added new path, following Jeff update
 PJD 31 May 2018     - Added new path, following Sasha update
 PJD 19 Jun 2018     - Updated all print functions for python3
+PJD  1 Aug 2018     - Redirected all durolib imports to CMIPLib
                     - TODO:
                     Add check to ensure CSS/GDO systems are online, if not abort - use sysCallTimeout function
                     sysCallTimeout(['ls','/cmip5_gdo2/'],5.) ; http://stackoverflow.com/questions/13685239/check-in-python-script-if-nfs-server-is-mounted-and-online
@@ -43,8 +44,7 @@ PJD 19 Jun 2018     - Updated all print functions for python3
 from __future__ import print_function ; # Python2->3 conversion
 import argparse,cPickle,datetime,gc,glob,gzip,os,shlex,sys,time
 sys.path.append('lib/')
-from CMIPLib import checkPID,logWrite,pathToFile,xmlLog,xmlWrite
-from durolib import mkDirNoOSErr,writeToLog #sysCallTimeout
+from CMIPLib import checkPID,logWrite,pathToFile,xmlLog,xmlWrite,mkDirNoOSErr,writeToLog
 from multiprocessing import Process,Manager
 from socket import gethostname
 from string import replace
