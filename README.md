@@ -1,8 +1,7 @@
 Work on CMOR3 XML database which will replace CMOR2 tables.
 
 Python preparation:
-pip install pylibconfig2
-pip install pyparsing
+pip install pylibconfig2 pyparsing
 
 Operations order:
 
