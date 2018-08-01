@@ -307,7 +307,9 @@ def process_path(xmlOutputDir, inpath):
                 elif str(err).find('CDMS I/O error: Determining type of file') >= 0:
                     updateSqlCdScan(inpath, None, xmlwrite, 'No write: CDMS Filetype determination issue')
                 elif str(err).find('Cannot allocate memory') >= 0:
-                    updateSqlCdScan(inpath, None, xmlwrite, 'No write: Memory allocation problem')                                        
+                    updateSqlCdScan(inpath, None, xmlwrite, 'No write: Memory allocation problem')  
+                elif str(err).find('Invalid relative time units') >= 0:
+                    updateSqlCdScan(inpath, None, xmlwrite, 'No write: Invalid relative time units')                      
                 else:    
                     updateSqlCdScan(inpath, None, xmlwrite, 'No write')
             else:
