@@ -27,7 +27,7 @@ import re
 import sys
 sys.path.append('config/')
 import scandir
-import sql_cmip5_config as sqlcfg
+import sql_cmip_config as sqlcfg
 import time
 import errno
 from glob import glob
@@ -140,8 +140,8 @@ def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
 
    
 def produceCMIP5Activity(experiment):
-    activityTable = {'sst2030' : 'CFMIP', 'sstClim' : 'CFMIP', 'sstClim4xCO2' : 'CFMIP', 
-                    'sstClimAerosol' : 'CFMIP', 'sstClimSulfate' : 'CFMIP', 
+    activityTable = {'sst2030' : 'CFMIP', 'sstClim' : 'RFMIP', 'sstClim4xCO2' : 'RFMIP', 
+                    'sstClimAerosol' : 'RFMIP', 'sstClimSulfate' : 'RFMIP', 
                     'amip4xCO2' : 'CFMIP', 'amipFuture' : 'CFMIP', 'aquaControl' : 'CFMIP', 
                     'aqua4xCO2' : 'CFMIP', 'aqua4K' : 'CFMIP', 'amip4K' : 'CFMIP', 
                     'piControl' : 'CMIP', 'historical' : 'CMIP', 'esmControl' : 'CMIP',
@@ -279,11 +279,13 @@ def updateSqlDb(path):
         variables   list    Specify list of variables to parse
     '''
     # create database connection
+
+    parentPath = path
     conn = MySQLdb.connect(host=sqlcfg.mysql_server, user=sqlcfg.mysql_user, password=sqlcfg.mysql_password, database=sqlcfg.mysql_database)
     c = conn.cursor()
 
     # get existing paths
-    print('Getting existing directories under: ' + path)
+    # print('Getting existing directories under: ' + path) # delete
     query = 'select path, modified from paths where path like \'' + path + '%\';'
     c.execute(query)
     a = c.fetchall()
@@ -294,7 +296,7 @@ def updateSqlDb(path):
         pathLookup = dict(zip(pexist, modTime))
         del a, pexist, modTime, query
     else:
-        pathLookup = {'',''}
+        pathLookup = {}
     query = 'select path from invalid_paths;'
     c.execute(query)
     a = c.fetchall()
@@ -342,8 +344,11 @@ def updateSqlDb(path):
                 update_mtimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_mtime)))
                 update_atimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_atime)))
 
-    print('Found ' + str(len(new_paths)) + ' new directories')
-    print('Found ' + str(len(update_paths)) + ' modified directories')
+    # print('Found ' + str(len(new_paths)) + ' new directories') # delete
+    # print('Found ' + str(len(update_paths)) + ' modified directories') # delete
+    # grab statistics 
+    foundNew = len(new_paths)
+    foundMod = len(update_paths)
     # write out new paths to database
     x = list(zip(new_paths,new_mtimes,new_ctimes,new_atimes))
     outputList = []
@@ -385,8 +390,11 @@ def updateSqlDb(path):
             c.executemany(q, invalidList)
             conn.commit()        
 
-    print('Ignored ' + str(len(invalidList)) + ' bad directories')
-    print('Wrote out ' + str(len(outputList)) + ' new directories to DB')
+    # print('Ignored ' + str(len(invalidList)) + ' bad directories') # delete
+    # print('Wrote out ' + str(len(outputList)) + ' new directories to DB') # delete
+    # statistics 
+    ignoredBad = len(invalidList)
+    wroteNew = len(outputList)
 
     # write out modified paths to database
     x = list(zip(update_paths,update_mtimes,update_ctimes,update_atimes))
@@ -409,10 +417,16 @@ def updateSqlDb(path):
             c.executemany(q, outputList)
             conn.commit()      
 
-    print('Updated ' + str(len(outputList)) + ' directories in DB')
+    # print('Updated ' + str(len(outputList)) + ' directories in DB') # delete
 
     # close db connection
     conn.close()
+
+    # statistics 
+    updatedMod = len(outputList)
+
+    # print(parentPath, foundNew, foundMod, ignoredBad, wroteNew, updatedMod)
+    return parentPath, foundNew, foundMod, ignoredBad, wroteNew, updatedMod
 
 def xmlWriteDev(inpath, outfile):
     cmd = 'cdscan -x ' + outfile + ' ' + inpath + '/*.nc'
