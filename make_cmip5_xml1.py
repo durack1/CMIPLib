@@ -15,10 +15,7 @@ PJD 22 May 2018     - Added new path, following Jeff update
 PJD 31 May 2018     - Added new path, following Sasha update
 PJD 19 Jun 2018     - Updated all print functions for python3
 PJD  1 Aug 2018     - Redirected all durolib imports to CMIPLib
-<<<<<<< HEAD
-=======
 PJD 21 Aug 2018     - Added explicit thread control, need to also ensure that anonymous logging is turned off in ~/.uvcdat
->>>>>>> 195c99cc0dc1d6ef8a58a323e95240348bed214c
                     - TODO:
                     Add check to ensure CSS/GDO systems are online, if not abort - use sysCallTimeout function
                     sysCallTimeout(['ls','/cmip5_gdo2/'],5.) ; http://stackoverflow.com/questions/13685239/check-in-python-script-if-nfs-server-is-mounted-and-online
