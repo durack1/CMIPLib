@@ -1,2 +1,3 @@
 *~
 *.pyc
+config/sql_cmip_config.py

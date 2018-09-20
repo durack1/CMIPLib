@@ -32,6 +32,7 @@ import time
 import errno
 from glob import glob
 from subprocess import Popen,PIPE
+import json
 
 def scantree(path):
     """Recursively yield directories with 1) no subdirectories and 2) files.
@@ -63,6 +64,118 @@ def strToDatetime(time):
     time = datetime.datetime(year,month,day,hour,minute,second)
     return time
 
+def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
+    # get realm id
+    realmIdLookup = {'aerosol' : 'ae', 'atmos' : 'ap', 'atmosChem' : 'ac', 
+                    'land' : 'ld', 'landIce' : 'gi', 'seaIce' : 'si', 
+                    'ocean' : 'op', 'ocnBgchem' : 'oc', 'river' : 'rr'}
+    realmId = realmIdLookup['atmos']
+    
+    # vert-id lookup information
+    z1List = set(['height2m', 'height10m', 'depth0m', 'depth100m', 'olayer100m', 'sdepth1', 'sdepth10'])
+    lList = set(['olevel', 'olevhalf', 'alevel', 'alevhalf'])
+    reP = re.compile(r'p[0-9]')
+    pCheck = [not not re.search(reP,i) for i in dimensions]
+    rePl = re.compile(r'pl[0-9]')
+    plCheck = [not not re.search(rePl,i) for i in dimensions]    
+    rePlev = re.compile(r'plev[0-9]')
+    plevCheck = [not not re.search(rePlev,i) for i in dimensions]
+
+    # get vert id
+    if len(z1List.intersection(set(dimensions))) > 0:
+        vertId = 'z1'
+    elif (any(pCheck) | any(plCheck)):
+        vertId = 'p1'
+    elif len(lList.intersection(set(dimensions))) > 0:
+        vertId = 'l'        
+    elif 'alev1'in dimensions:
+        vertId = 'l1'
+    elif 'sdepth'in dimensions:
+        vertId = 'z'
+    elif 'alt16'in dimensions:
+        vertId = 'z16'        
+    elif 'alt40'in dimensions:
+        vertId = 'z40'
+    elif 'rho'in dimensions:
+        vertId = 'd'      
+    elif any(plevCheck):  
+        dimensions = np.array(dimensions)
+        vertId = 'p' + dimensions[plevCheck][0].split('plev')[1]
+    else:
+        vertId = '2d'
+
+    # get region id
+    if mip_era == 'CMIP6':
+        if cmipTable in ['IfxAnt', 'IyrAnt', 'ImonAnt']:
+            regionId = 'ant'
+        elif cmipTable in ['IfxGrn', 'IyrGrn', 'ImonGrn']:
+            regionId = 'grn'
+        else:
+            regionId = 'glb'
+    else:
+        regionId = 'glb'
+
+    # get h1 variable
+    locList = set(['site', 'oline', 'basin', 'siline'])
+    dimList = set(['latitude', 'yant', 'ygre', 'longitude', 'xant', 'yant'])    
+    if len(locList.intersection(set(dimensions))) > 0:
+        h1 = 's'
+    elif cmipTable in ('AERmonZ', 'E6hrZ', 'EdayZ', 'EmonZ'):
+        h1 = 'z'
+    elif len(dimList.intersection(set(dimensions))) == 0:
+        h1 = 'm'
+    else:
+        h1 = 'g'
+
+    gridLabel = regionId + '-' + realmId + '-' + vertId + '-' + h1
+
+    if mip_era == 'CMIP6':
+        if grid == 'gm':
+            gridLabel = gridLabel + 'n'
+        else:
+            gridStrip = grid.replace('g','').replace('a','').replace('z','')
+            gridLabel  = gridLabel + gridStrip
+
+    return gridLabel
+
+   
+def produceCMIP5Activity(experiment):
+    activityTable = {'sst2030' : 'CFMIP', 'sstClim' : 'CFMIP', 'sstClim4xCO2' : 'CFMIP', 
+                    'sstClimAerosol' : 'CFMIP', 'sstClimSulfate' : 'CFMIP', 
+                    'amip4xCO2' : 'CFMIP', 'amipFuture' : 'CFMIP', 'aquaControl' : 'CFMIP', 
+                    'aqua4xCO2' : 'CFMIP', 'aqua4K' : 'CFMIP', 'amip4K' : 'CFMIP', 
+                    'piControl' : 'CMIP', 'historical' : 'CMIP', 'esmControl' : 'CMIP',
+                    'esmHistorical' : 'CMIP', '1pctCO2' : 'CMIP', 'abrupt4xCO2' : 'CMIP', 
+                    'amip' : 'CMIP', 'historicalExt' : 'CMIP', 'esmrcp85' : 'C4MIP', 
+                    'esmFixClim1' : 'C4MIP', 'esmFixClim2' : 'C4MIP', 'esmFdbk1' : 'C4MIP', 
+                    'esmFdbk2' : 'C4MIP', 'historicalNat' : 'DAMIP', 'historicalGHG' : 'DAMIP', 
+                    'historicalMisc' : 'DAMIP', 'midHolocene' : 'PMIP', 'lgm' : 'PMIP', 
+                    'past1000' : 'PMIP', 'rcp45' : 'ScenarioMIP', 'rcp85' : 'ScenarioMIP', 
+                    'rcp26' : 'ScenarioMIP', 'rcp60' : 'ScenarioMIP'}
+
+    reDec = re.compile(r'decadal[0-9]{4}')
+    if not not re.search(reDec, experiment):
+        activity = 'DCPP'
+    elif experiment in activityTable.keys():
+        activity = activityTable[experiment]
+    else:
+        activity = 'CMIP5'
+
+    return activity
+
+
+
+def lookupCMIP6Metadata(cmipTable, variable):
+    # https://github.com/PCMDI/cmip6-cmor-tables
+    fn = 'cmip6-cmor-tables/Tables/CMIP6_' + cmipTable + '.json'
+    with open(fn) as f:
+        data = json.load(f)    
+    frequency = data['variable_entry'][variable]['frequency']
+    realm = data['variable_entry'][variable]['modeling_realm'].split(' ')[0]
+    dimensions = data['variable_entry'][variable]['dimensions'].split(' ')
+    return frequency, realm, dimensions
+
+
 def parsePath(path):
     '''
     parsePath(path):
@@ -73,11 +186,13 @@ def parsePath(path):
 
     Note that validPath is a boolean indicating whether the path is valid
     '''
-    meta = path.split('/')[1:-1]
+    meta = path.split('/')[1:-1]   
+    
     validPath = True
     # remove double versions
     if meta[-2] == meta[-3]:
         meta.pop(-2)
+    # check for 'bad' directories
     e = path.split('/')[-2]
     bad = re.compile('bad[0-9]{1}')
     check = re.match(bad, e)
@@ -85,42 +200,67 @@ def parsePath(path):
     if check != None:
         checkBad = False
     if ((len(meta) > 10) & (checkBad)):
-        if ((meta[-1] != '1') & (meta[-1] != '2')):
+        if meta[-10] == 'CMIP6':
+            version = meta[-1]
+            grid = meta[-2]
+            variable = meta[-3]
+            cmipTable = meta[-4]
+            member = meta[-5] 
+            experiment = meta[-6]
+            model = meta[-7]
+            institute = meta[-8]
+            activity = meta[-9] 
+            mip_era = meta[-10] 
+            frequency, realm, dimensions = lookupCMIP6Metadata(cmipTable, variable)
+            # gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
+        elif ((meta[-1] != '1') & (meta[-1] != '2')):
             variable = meta[-1]
             version = meta[-2]
-            realization = meta[-3]
+            member = meta[-3]
             cmipTable = meta[-4]
             realm = meta[-5]
-            tfreq = meta[-6]
+            frequency = meta[-6]            
             experiment = meta[-7]
             model = meta[-8]
             institute = meta[-9]
-            product = meta[-10]
+            activity = produceCMIP5Activity(experiment)
+            mip_era = 'CMIP5'
+            grid = 'gx'
+            # frequencyx, realmx, dimensions = lookupCMIP6Metadata(cmipTable, variable)
+            # gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
         else:
             variable = meta[-2]
             version = meta[-1]
-            realization = meta[-3]
+            member = meta[-3]
             cmipTable = meta[-4]
             realm = meta[-5]
-            tfreq = meta[-6]
+            frequency = meta[-6]            
             experiment = meta[-7]
             model = meta[-8]
             institute = meta[-9]
-            product = meta[-10]
+            activity = produceCMIP5Activity(experiment)
+            mip_era = 'CMIP5'
+            grid = 'gx'
+            # frequencyx, realmx, dimensions = lookupCMIP6Metadata(cmipTable, variable)
+            # gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
     else:
         validPath = False
-        variable = []
         version = []
-        realization = []
+        grid = []
+        variable = []
         cmipTable = []
         realm = []
-        tfreq = []
+        frequency = []
+        # gridLabel = []
+        member = []
         experiment = []
         model = []
         institute = []
-        product = []
+        activity = []
+        mip_era = []
 
-    return validPath, variable, version, realization, cmipTable, realm, tfreq, experiment, model, institute, product
+    return validPath, variable, version, member, cmipTable, realm, frequency, grid, experiment, model, institute, activity, mip_era
+
 
 def updateSqlDb(path):
     '''
@@ -144,17 +284,26 @@ def updateSqlDb(path):
 
     # get existing paths
     print('Getting existing directories under: ' + path)
-    query = 'select * from paths where path like \'' + path + '%\';'
+    query = 'select path, modified from paths where path like \'' + path + '%\';'
     c.execute(query)
     a = c.fetchall()
     a = np.array(a)
     if len(a) > 0:
-        pexist = list(a[:,1])
-        modTime = list(a[:,13])
+        pexist = list(a[:,0])
+        modTime = list(a[:,1])
         pathLookup = dict(zip(pexist, modTime))
         del a, pexist, modTime, query
     else:
         pathLookup = {'',''}
+    query = 'select path from invalid_paths;'
+    c.execute(query)
+    a = c.fetchall()
+    a = np.array(a)
+    if len(a) > 0:
+        invalidPaths = list(a[:,0])
+        del a
+    else:
+        invalidPaths = []
 
     # lists for previously undocumented directories
     new_paths = []
@@ -173,7 +322,7 @@ def updateSqlDb(path):
     for i, file_path in enumerate(x):
         # check if directory is in database
         # else check time stamp and add to list if it is new
-        if file_path not in pathLookup:
+        if ((file_path not in pathLookup) & (file_path not in invalidPaths)):
             try:
                 new_paths.append(file_path)
                 ts = scandir.stat(file_path)
@@ -182,7 +331,7 @@ def updateSqlDb(path):
                 new_atimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_atime)))
             except OSError:
                 print('Error accessing ' + file_path)
-        else:
+        elif file_path in pathLookup:
             oldModTime = str(pathLookup[file_path])
             oldModTime = strToDatetime(oldModTime)+datetime.timedelta(seconds=1) # add 1s to account for ms precision on file system
             ts = scandir.stat(file_path)
@@ -193,18 +342,23 @@ def updateSqlDb(path):
                 update_mtimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_mtime)))
                 update_atimes.append(toSQLtime(datetime.datetime.fromtimestamp(ts.st_atime)))
 
-    print('Found ' + str(len(update_paths) + len(new_paths)) + ' new/modified directories')
+    print('Found ' + str(len(new_paths)) + ' new directories')
+    print('Found ' + str(len(update_paths)) + ' modified directories')
     # write out new paths to database
     x = list(zip(new_paths,new_mtimes,new_ctimes,new_atimes))
     outputList = []
+    invalidList = []
     for path, mtime, ctime, atime in x:
-        validPath, variable, version, realization, cmipTable, realm, tfreq, experiment, model, institute, product = parsePath(path)
+        validPath, variable, version, member, cmipTable, realm, frequency, grid, experiment, model, institute, activity, mip_era = parsePath(path)
         if validPath:
-            litem = [path, product, institute, model, experiment, tfreq, realm, cmipTable, realization, version, variable, ctime, mtime, atime, '0', None]
+            litem = [path, mip_era, activity, institute, model, experiment, cmipTable, realm, frequency, member, grid, version, variable, ctime, mtime, atime, '0', None]
             outputList.append(litem)
+        else:
+            pathTime = toSQLtime(datetime.datetime.now())
+            invalidList.append([path, pathTime])
     q = """ INSERT INTO paths (
-            path, product, institute, model, experiment, tfreq, realm, cmipTable, realization, version, variable, created, modified, accessed, retired, retire_datetime)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+            path, mip_era, activity, institute, model, experiment, cmipTable, realm, frequency, member, grid, version, variable, created, modified, accessed, retired, retire_datetime)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
         """
     if len(outputList) > 0:
         # write out in chunks of 1000
@@ -215,9 +369,23 @@ def updateSqlDb(path):
                 conn.commit()      
         else:  
             c.executemany(q, outputList)
-            conn.commit()      
+            conn.commit()    
+    # write out invalid paths  
+    q = """ INSERT INTO invalid_paths (path, datetime)
+            VALUES (%s, %s);
+        """
+    if len(invalidList) > 0:
+        # write out in chunks of 1000
+        if len(invalidList) > 1000:
+            for i in range(int(np.ceil(len(invalidList)/1000))):
+                ro = invalidList[i*1000:i*1000+1000]
+                c.executemany(q, ro)
+                conn.commit()      
+        else:  
+            c.executemany(q, invalidList)
+            conn.commit()        
 
-
+    print('Ignored ' + str(len(invalidList)) + ' bad directories')
     print('Wrote out ' + str(len(outputList)) + ' new directories to DB')
 
     # write out modified paths to database
@@ -273,16 +441,22 @@ def findInList(keyString, list):
 
 def process_path(xmlOutputDir, inpath):
     # parse path
-    validPath, variable, version, realization, cmipTable, realm, tfreq, experiment, model, institute, product = parsePath(inpath)
+    validPath, variable, version, member, cmipTable, realm, frequency, grid, experiment, model, institute, activity, mip_era = parsePath(inpath)
+    reDec = re.compile(r'decadal[0-9]{4}')
+    if not not re.search(reDec, experiment):
+        experimentPath = 'decadal'
+    else:
+        experimentPath = experiment
     if validPath:
         # output filename
-        if tfreq == 'fx':
-            outfile = xmlOutputDir + '/fx/' + variable + '/cmip5.' + model + '.' + experiment + '.' + realization + '.' + tfreq + '.' + realm + '.' + cmipTable + '.' + variable + '.000000.' + version + '.0.xml'
-        else:    
-            outfile = xmlOutputDir + '/' + experiment + '/' + realm + '/' + tfreq + '/' + variable + '/cmip5.' + model + '.' + experiment + '.' + realization + '.' + tfreq + '.' + realm + '.' + cmipTable + '.' + variable + '.000000.' + version + '.0.xml'
+        # if tfreq == 'fx':
+        #     outfile = xmlOutputDir + '/fx/' + variable + '/' + mip_era + '.' + activity + '.' + model + '.' + experiment + '.' + member + '.' + cmipTable + '.' + variable + '.0000000.' + version + '.0.xml'
+        # else:    
+            # outfile = xmlOutputDir + '/' + experiment + '/' + cmipTable + '/' + variable + '/' + mip_era + '.' + activity + '.' + model + '.' + experiment + '.' + member + '.' + cmipTable + '.' + variable + '.0000000.' + version + '.0.xml'
+        outfile = xmlOutputDir + '/' + mip_era + '/' + experimentPath + '/' + realm + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + grid + '.' + version + '.0000000.0.xml'
         outfile = outfile.replace('//','/')
         # check if written already
-        ef = glob(outfile.replace('.000000.','.*.').replace('.0.xml','.*.xml'))
+        ef = glob(outfile.replace('.0000000.','.*.').replace('.0.xml','.*.xml'))
         if len(ef) == 0:
             ensure_dir(outfile)
             # create xml
@@ -316,7 +490,7 @@ def process_path(xmlOutputDir, inpath):
                 errors = getWarnings(str(err))
                 if len(errors) > 0:
                     errorCode = parseWarnings(errors)
-                    outfileNew = outfile.replace('000000',errorCode)
+                    outfileNew = outfile.replace('0000000',errorCode)
                     os.rename(outfile,outfileNew)
                     outfile = outfileNew
                     if len(errors) > 255:
@@ -331,6 +505,7 @@ def process_path(xmlOutputDir, inpath):
             # else populate the current writetime
             xmlwrite = toSQLtime(datetime.datetime.now())
             if len(queryResult) > 0:
+                # check if path is the same 
                 if len(findInList(inpath, queryResult[0])) == 0:   
                     # update database with xml write
                     updateSqlCdScan(inpath, None, xmlwrite, 'Existing xml link')
@@ -365,7 +540,7 @@ def getWarnings(err):
     return errorCode
 
 def parseWarnings(err):
-    errorCode = list('00000')
+    errorCode = list('0000000')
     if err.find('dimension time contains values in file') >= 0:
         errorCode[0] = '1'
     if err.find('Warning: Axis values for axis time are not monotonic') >= 0:
@@ -376,6 +551,10 @@ def parseWarnings(err):
         errorCode[3] = '1'                        
     if err.find('dimension time overlaps file') >= 0:
         errorCode[4] = '1'
+    if err.find('Your first bounds') >= 0:
+        errorCode[5] = '1'        
+    if err.find('Python Error') >= 0:
+        errorCode[6] = '1'                
     errorCode = "".join(errorCode)        
     return errorCode
 

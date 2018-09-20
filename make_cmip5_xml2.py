@@ -34,8 +34,8 @@ from tqdm import tqdm # conda install tqdm
 print('Started on: ', time.ctime()) # start time for reference
 t00 = time.time() # time whole script
 
-xmlOutputDir = '/work/cmip5-dyn/'
-updatePaths = False
+xmlOutputDir = '/work/cmip-dyn/'
+updatePaths = True
 
 # Define search directories
 data_directories = ['/p/css03/cmip5_css01/data/cmip5/output1/', '/p/css03/cmip5_css01/data/cmip5/output2/',
@@ -45,7 +45,7 @@ data_directories = ['/p/css03/cmip5_css01/data/cmip5/output1/', '/p/css03/cmip5_
                     '/p/css03/scratch/published-older/cmip5/', '/p/css03/scratch/should-publish/cmip5/',
                     '/p/css03/scratch/unknown-dset/cmip5/', '/p/css03/scratch/unknown-status/cmip5/',
                     '/p/css03/scratch/unknown-status/cmip5/', '/p/css03/scratch/obsolete/cmip5/',
-                    '/p/css03/esgf_publish/cmip5/']
+                    '/p/css03/esgf_publish/cmip5/', '/p/css03/esgf_publish/CMIP6/CMIP/']
 
 num_processors = 20
 
@@ -63,6 +63,18 @@ exps = ['1pctCO2','abrupt4xCO2','amip','amip4K','amip4xCO2','amipFuture','histor
         'historicalGHG','historicalMisc','historicalNat','past1000','piControl','rcp26','rcp45','rcp60',\
         'rcp85', 'sstClim','sstClim4xCO2']
 
+
+# for testing
+# CMIPLib.updateSqlDb('/p/css03/cmip5_css02/data/cmip5/output1/NCAR/CCSM4/past1000/mon/atmos/Amon/r1i1p1/')
+# CMIPLib.updateSqlDb('/p/css03/esgf_publish/CMIP6/CMIP/')
+# q = "select path from paths where variable = \'tas\';"
+# queryResult = CMIPLib.sqlQuery(q)
+# dirs_to_scan = list(queryResult[:,0])
+# for path in dirs_to_scan:
+#     print(path)
+#     CMIPLib.process_path(xmlOutputDir, path)
+
+
 if updatePaths:
     ## update SQL DB - parallelize here
     for parent in data_directories:
@@ -78,6 +90,8 @@ if updatePaths:
 else:
     print('Using existing path information in database...')
 
+stop
+
 # get directories to scan
 print('Getting directories to scan...')
 # change input lists to strings for query
@@ -86,8 +100,15 @@ temporal = '\'' + '\', \''.join(temporal) + '\''
 exps = '\'' + '\', \''.join(exps) + '\''
 # create query 
 q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and ((xmlFile is NULL or xmlFile = \'None\') or (xmlwritedatetime < modified or xmlwritedatetime is NULL));"
-q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and (xmlFile is NULL);"
-q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and cdscanerror like 'No write%';"
+# q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and (xmlFile is NULL);"
+# used this to run all files with any no write error
+# q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and cdscanerror like 'No write%';"
+# used this to run no write files
+# q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and cdscanerror = 'No write';"
+# used this to get newer fgoals-g2 xmls (which have same version number as the old files)
+# q = "select path from paths where variable in (" + var_in + ") and experiment=\'historical\' and model = \'FGOALS-g2\' and tfreq = \'mon\' and ((xmlFile is NULL or xmlFile = 'None') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and path not like \'%esgf_publish%\';"
+# q = 'select path from paths where mip_era = \'CMIP6\';'
+
 # get directories
 queryResult = CMIPLib.sqlQuery(q)
 dirs_to_scan = list(queryResult[:,0])
