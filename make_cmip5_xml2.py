@@ -24,6 +24,7 @@ Script is meant to create xml library in several parts:
                         functionality to retire paths
 |  SP  20 Sep 2018  -   Python 3 ready, argument parsing, various defined scan modes, 
                         track bad paths in database, parallelized path scanning
+|  SP  21 Sep 2018  -   added gridlabel code, functionality to include database stats
 
 @author: pochedls
 """
@@ -73,6 +74,12 @@ if INIPYTHON == False: # Look for cmd line arguments if we are NOT in Ipython
                         help="Base output directory for xml files (default /work/cmip-dyn/)")
     parser.add_argument('-n', '--numProcessors', type=int,
                         help="Number of processors for creating xml files (default 20)")
+    parser.add_argument('-l', '--lastTouch', type=int,
+                        default = 24,
+                        help="Number of hours since a directory was modified to process it")  
+    parser.add_argument('-c', '--countStats', type=str2bool,
+                        default = False,
+                        help="Boolean to record statistics on xml database")                            
 
     args = parser.parse_args()
 
@@ -80,13 +87,17 @@ if INIPYTHON == False: # Look for cmd line arguments if we are NOT in Ipython
     updateScans = args.updateScans
     xmlOutputDir = args.xmlOutputDir
     numProcessors = args.numProcessors
+    lastTouch = args.lastTouch
+    countStats = args.countStats
 
 else:
 
-    updatePaths = True
-    updateScans = False
+    updatePaths = False
+    updateScans = True
     xmlOutputDir = '/work/cmip-dyn/'
     numProcessors = 20
+    lastTouch = 24
+    countStats = False
 
 # Define search directories
 data_directories = ['/p/css03/cmip5_css01/data/cmip5/output1/', '/p/css03/cmip5_css01/data/cmip5/output2/',
@@ -164,7 +175,7 @@ var_in = '\'' + '\', \''.join(var_in) + '\''
 temporal = '\'' + '\', \''.join(temporal) + '\''
 exps = '\'' + '\', \''.join(exps) + '\''
 # create query 
-q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and ((xmlFile is NULL or xmlFile = \'None\') or (xmlwritedatetime < modified or xmlwritedatetime is NULL));"
+q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and frequency in (" + temporal + ") and ((xmlFile is NULL or xmlFile = \'None\') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and TIMESTAMPDIFF(HOUR, modified, now()) > " + str(lastTouch) + " ;"
 # q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and (xmlFile is NULL);"
 # used this to run all files with any no write error
 # q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and cdscanerror like 'No write%';"
@@ -174,18 +185,33 @@ q = "select path from paths where variable in (" + var_in + ") and experiment in
 # q = "select path from paths where variable in (" + var_in + ") and experiment=\'historical\' and model = \'FGOALS-g2\' and tfreq = \'mon\' and ((xmlFile is NULL or xmlFile = 'None') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and path not like \'%esgf_publish%\';"
 # q = 'select path from paths where mip_era = \'CMIP6\';'
 
+# q = "select path from paths where institute = \'IPSL\' and variable = \'tas\' and member like \'r1i1p1%\' and experiment = \'piControl\' and model like \'IPSL-CM%A-LR\' and frequency = \'mon\' and path like \'%esgf_publish%\'";
+
 # get directories
 if updateScans:
+    print('Using ' + str(numProcessors) + ' processors to scan directories...', end='\n \n')
     # get directories to scan
     print('Getting directories to scan...')
     queryResult = CMIPLib.sqlQuery(q)
     dirs_to_scan = list(queryResult[:,0])
     print(str(len(dirs_to_scan)) + ' directories to scan...')
-
+    if len(dirs_to_scan) < numProcessors:
+        numProcessors = len(dirs_to_scan)
     print('Starting directory scanning...')
     print('Started on: ', time.ctime()) # start time for reference
     results = Parallel(n_jobs=numProcessors)(delayed(CMIPLib.process_path)(xmlOutputDir, inpath)\
                for (inpath) in tqdm(dirs_to_scan))
+
+if countStats:
+    print('Writing statistics to database', end='\n\n')
+    q = []
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip5 directories\', (select count(*) as n from paths where mip_era = \'CMIP5\'), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip6 directories\', (select count(*) as n from paths where mip_era = \'CMIP6\'), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip5 xml files\', (select count(*) as n from paths where mip_era = \'CMIP5\' and xmlFile is NOT NULL), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip6 xml files\', (select count(*) as n from paths where mip_era = \'CMIP6\' and xmlFile is NOT NULL), now());")
+    for query in q:
+        queryResult = CMIPLib.sqlInsertQuery(query)
+
 
 print('Finished on: ', time.ctime()) # start time for reference
 

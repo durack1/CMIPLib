@@ -12,7 +12,7 @@ Paul J. Durack and Stephen Po-Chedley 11th April 2018
 |  PJD 19 Jun 2018  - Updated with functions from make_cmip5_xml1.py
 |  PJD 19 2018       - Updated to use conda mysqlclient
 
-## conda create -n cdat8 -c conda-forge -c cdat python=3.6 cdat mesalib joblib mysql-connector-python scandir
+## conda create -n cdat8 -c conda-forge -c cdat python=3.6 cdat mesalib joblib mysql-connector-python scandir pylibconfig2
 
 @authors: durack1, @pochedley1
 """
@@ -69,7 +69,7 @@ def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
     realmIdLookup = {'aerosol' : 'ae', 'atmos' : 'ap', 'atmosChem' : 'ac', 
                     'land' : 'ld', 'landIce' : 'gi', 'seaIce' : 'si', 
                     'ocean' : 'op', 'ocnBgchem' : 'oc', 'river' : 'rr'}
-    realmId = realmIdLookup['atmos']
+    realmId = realmIdLookup[realm]
     
     # vert-id lookup information
     z1List = set(['height2m', 'height10m', 'depth0m', 'depth100m', 'olayer100m', 'sdepth1', 'sdepth10'])
@@ -82,7 +82,9 @@ def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
     plevCheck = [not not re.search(rePlev,i) for i in dimensions]
 
     # get vert id
-    if len(z1List.intersection(set(dimensions))) > 0:
+    if  len(dimensions) == 0:
+        vertId = 'x'
+    elif len(z1List.intersection(set(dimensions))) > 0:
         vertId = 'z1'
     elif (any(pCheck) | any(plCheck)):
         vertId = 'p1'
@@ -163,16 +165,36 @@ def produceCMIP5Activity(experiment):
 
     return activity
 
-
-
-def lookupCMIP6Metadata(cmipTable, variable):
+def lookupCMIPMetadata(mip_era, cmipTable, variable):
     # https://github.com/PCMDI/cmip6-cmor-tables
-    fn = 'cmip6-cmor-tables/Tables/CMIP6_' + cmipTable + '.json'
-    with open(fn) as f:
-        data = json.load(f)    
-    frequency = data['variable_entry'][variable]['frequency']
-    realm = data['variable_entry'][variable]['modeling_realm'].split(' ')[0]
-    dimensions = data['variable_entry'][variable]['dimensions'].split(' ')
+    frequency = []
+    realm = []
+    dimensions = []
+    if mip_era == 'CMIP6':
+        fn = 'cmip6-cmor-tables/Tables/CMIP6_' + cmipTable + '.json'
+        with open(fn) as f:
+            data = json.load(f)    
+        frequency = data['variable_entry'][variable]['frequency']
+        realm = data['variable_entry'][variable]['modeling_realm'].split(' ')[0]
+        dimensions = data['variable_entry'][variable]['dimensions'].split(' ')
+    elif mip_era == 'CMIP5':
+        cmipTable = cmipTable.replace('CFm','cfM')
+        fn = 'cmip5-cmor-tables/Tables/CMIP5_' + cmipTable
+        f = open(fn, "r")
+        lines = f.readlines()
+        f.close()
+        inVar = False
+        for line in lines:
+            if line.find('frequency:') >= 0:
+                frequency = line.split(' ')[1].split('\n')[0]
+            if line.find('variable_entry:') >= 0: 
+                if line.find(variable) >= 0: 
+                    inVar = True
+            if ((line.find('modeling_realm:') >= 0) & (inVar)):
+                realm = line.split(' ')[-1].split('\n')[0]    
+            if ((line.find('dimensions:') >= 0) & (inVar)):
+                dimensions = line.split('        ')[-1].split('\n')[0].split(' ')   
+                break                              
     return frequency, realm, dimensions
 
 
@@ -211,8 +233,8 @@ def parsePath(path):
             institute = meta[-8]
             activity = meta[-9] 
             mip_era = meta[-10] 
-            frequency, realm, dimensions = lookupCMIP6Metadata(cmipTable, variable)
-            # gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
+            frequency, realm, dimensions = lookupCMIPMetadata(mip_era, cmipTable, variable)
+            gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
         elif ((meta[-1] != '1') & (meta[-1] != '2')):
             variable = meta[-1]
             version = meta[-2]
@@ -226,8 +248,8 @@ def parsePath(path):
             activity = produceCMIP5Activity(experiment)
             mip_era = 'CMIP5'
             grid = 'gx'
-            # frequencyx, realmx, dimensions = lookupCMIP6Metadata(cmipTable, variable)
-            # gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
+            frequencyx, realmx, dimensions = lookupCMIPMetadata(mip_era, cmipTable, variable)
+            gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
         else:
             variable = meta[-2]
             version = meta[-1]
@@ -241,8 +263,8 @@ def parsePath(path):
             activity = produceCMIP5Activity(experiment)
             mip_era = 'CMIP5'
             grid = 'gx'
-            # frequencyx, realmx, dimensions = lookupCMIP6Metadata(cmipTable, variable)
-            # gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
+            frequencyx, realmx, dimensions = lookupCMIPMetadata(mip_era, cmipTable, variable)
+            gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
     else:
         validPath = False
         version = []
@@ -251,7 +273,7 @@ def parsePath(path):
         cmipTable = []
         realm = []
         frequency = []
-        # gridLabel = []
+        gridLabel = []
         member = []
         experiment = []
         model = []
@@ -259,7 +281,7 @@ def parsePath(path):
         activity = []
         mip_era = []
 
-    return validPath, variable, version, member, cmipTable, realm, frequency, grid, experiment, model, institute, activity, mip_era
+    return validPath, variable, version, member, cmipTable, realm, frequency, grid, gridLabel, experiment, model, institute, activity, mip_era
 
 
 def updateSqlDb(path):
@@ -354,16 +376,16 @@ def updateSqlDb(path):
     outputList = []
     invalidList = []
     for path, mtime, ctime, atime in x:
-        validPath, variable, version, member, cmipTable, realm, frequency, grid, experiment, model, institute, activity, mip_era = parsePath(path)
+        validPath, variable, version, member, cmipTable, realm, frequency, grid, gridLabel, experiment, model, institute, activity, mip_era = parsePath(path)
         if validPath:
-            litem = [path, mip_era, activity, institute, model, experiment, cmipTable, realm, frequency, member, grid, version, variable, ctime, mtime, atime, '0', None]
+            litem = [path, mip_era, activity, institute, model, experiment, cmipTable, realm, frequency, member, grid, gridLabel, version, variable, ctime, mtime, atime, '0', None]
             outputList.append(litem)
         else:
             pathTime = toSQLtime(datetime.datetime.now())
             invalidList.append([path, pathTime])
     q = """ INSERT INTO paths (
-            path, mip_era, activity, institute, model, experiment, cmipTable, realm, frequency, member, grid, version, variable, created, modified, accessed, retired, retire_datetime)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+            path, mip_era, activity, institute, model, experiment, cmipTable, realm, frequency, member, grid, gridLabel, version, variable, created, modified, accessed, retired, retire_datetime)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
         """
     if len(outputList) > 0:
         # write out in chunks of 1000
@@ -455,7 +477,7 @@ def findInList(keyString, list):
 
 def process_path(xmlOutputDir, inpath):
     # parse path
-    validPath, variable, version, member, cmipTable, realm, frequency, grid, experiment, model, institute, activity, mip_era = parsePath(inpath)
+    validPath, variable, version, member, cmipTable, realm, frequency, grid, gridLabel, experiment, model, institute, activity, mip_era = parsePath(inpath)
     reDec = re.compile(r'decadal[0-9]{4}')
     if not not re.search(reDec, experiment):
         experimentPath = 'decadal'
@@ -467,7 +489,7 @@ def process_path(xmlOutputDir, inpath):
         #     outfile = xmlOutputDir + '/fx/' + variable + '/' + mip_era + '.' + activity + '.' + model + '.' + experiment + '.' + member + '.' + cmipTable + '.' + variable + '.0000000.' + version + '.0.xml'
         # else:    
             # outfile = xmlOutputDir + '/' + experiment + '/' + cmipTable + '/' + variable + '/' + mip_era + '.' + activity + '.' + model + '.' + experiment + '.' + member + '.' + cmipTable + '.' + variable + '.0000000.' + version + '.0.xml'
-        outfile = xmlOutputDir + '/' + mip_era + '/' + experimentPath + '/' + realm + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + grid + '.' + version + '.0000000.0.xml'
+        outfile = xmlOutputDir + '/' + mip_era + '/' + experimentPath + '/' + realm + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + grid + '.' + gridLabel + '.' + version + '.0000000.0.xml'
         outfile = outfile.replace('//','/')
         # check if written already
         ef = glob(outfile.replace('.0000000.','.*.').replace('.0.xml','.*.xml'))
@@ -628,6 +650,15 @@ def sqlQuery(query):
     conn.close()
 
     return queryResult
+
+def sqlInsertQuery(query):
+    # create database connection
+    conn = MySQLdb.connect(host=sqlcfg.mysql_server, user=sqlcfg.mysql_user, password=sqlcfg.mysql_password, database=sqlcfg.mysql_database)
+    c = conn.cursor()
+
+    c.execute(query)
+    conn.commit()
+    conn.close()  
 
 def updateSqlCdScan(full_path, xmlFile, xmlwriteDatetime, error):
     '''

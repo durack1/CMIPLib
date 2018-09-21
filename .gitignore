@@ -1,3 +1,24 @@
+<<<<<<< HEAD
 *~
 *.pyc
 config/sql_cmip_config.py
+=======
+TAGS
+.ant-targets-build.xml
+*~
+*swp
+*.cache
+*.DS_Store
+*.a
+*.o
+*.class
+*.pyc
+*.project
+*.cproject
+*.pydevproject
+*.egg
+*#*
+*.md5
+*.sql3
+
+>>>>>>> 9af0d5b9bd4e5d3016e412cb2340eccdb2125ad6
