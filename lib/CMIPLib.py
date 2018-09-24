@@ -100,6 +100,8 @@ def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
         vertId = 'z40'
     elif 'rho'in dimensions:
         vertId = 'd'      
+    elif 'plevs' in dimensions:  
+        vertId = 'p'         
     elif any(plevCheck):  
         dimensions = np.array(dimensions)
         vertId = 'p' + dimensions[plevCheck][0].split('plev')[1]
@@ -171,7 +173,7 @@ def lookupCMIPMetadata(mip_era, cmipTable, variable):
     realm = []
     dimensions = []
     if mip_era == 'CMIP6':
-        fn = 'cmip6-cmor-tables/Tables/CMIP6_' + cmipTable + '.json'
+        fn = 'data/cmip6/CMIP6_' + cmipTable + '.json'
         with open(fn) as f:
             data = json.load(f)    
         frequency = data['variable_entry'][variable]['frequency']
@@ -179,7 +181,7 @@ def lookupCMIPMetadata(mip_era, cmipTable, variable):
         dimensions = data['variable_entry'][variable]['dimensions'].split(' ')
     elif mip_era == 'CMIP5':
         cmipTable = cmipTable.replace('CFm','cfM')
-        fn = 'cmip5-cmor-tables/Tables/CMIP5_' + cmipTable
+        fn = 'data/cmip5/CMIP5_' + cmipTable
         f = open(fn, "r")
         lines = f.readlines()
         f.close()
@@ -188,12 +190,12 @@ def lookupCMIPMetadata(mip_era, cmipTable, variable):
             if line.find('frequency:') >= 0:
                 frequency = line.split(' ')[1].split('\n')[0]
             if line.find('variable_entry:') >= 0: 
-                if line.find(variable) >= 0: 
+                if line.find(variable + '\n') >= 0: 
                     inVar = True
             if ((line.find('modeling_realm:') >= 0) & (inVar)):
                 realm = line.split(' ')[-1].split('\n')[0]    
             if ((line.find('dimensions:') >= 0) & (inVar)):
-                dimensions = line.split('        ')[-1].split('\n')[0].split(' ')   
+                dimensions = line.split('  ')[-1].split('\n')[0].split(' ')   
                 break                              
     return frequency, realm, dimensions
 
@@ -475,31 +477,58 @@ def findInList(keyString, list):
     outList = [s for s in list if keyString in s]
     return outList; 
 
-def process_path(xmlOutputDir, inpath):
+def process_path(xmlOutputDir, inpath, replaceXml=False):
+    """process_path(xmlOutputDir, inpath, replaceXml=False)
+
+    Function is intended to full process a CMIP path. In particular,
+    the function will: 
+                        * parse the path and generate an filename
+                        * create the xml file
+                        * update the xml filename to populate binary warning flags
+                        * update the database with the new xml
+                        * if replaceXml is True, any old files will be deleted and re-generated
+    The xmlOutputDir must be specified (e.g., '/work/cmip-dyn/') along with the directory of
+    the CMIP data path (inpath). The replaceXml flag is options and False by default. 
+
+    """
     # parse path
     validPath, variable, version, member, cmipTable, realm, frequency, grid, gridLabel, experiment, model, institute, activity, mip_era = parsePath(inpath)
-    reDec = re.compile(r'decadal[0-9]{4}')
-    if not not re.search(reDec, experiment):
-        experimentPath = 'decadal'
-    else:
-        experimentPath = experiment
+    # continue if the path is valid
     if validPath:
+        # create filename
+        reDec = re.compile(r'decadal[0-9]{4}')
+        if not not re.search(reDec, experiment):
+            experimentPath = 'decadal'
+        else:
+            experimentPath = experiment        
         # output filename
-        # if tfreq == 'fx':
-        #     outfile = xmlOutputDir + '/fx/' + variable + '/' + mip_era + '.' + activity + '.' + model + '.' + experiment + '.' + member + '.' + cmipTable + '.' + variable + '.0000000.' + version + '.0.xml'
-        # else:    
-            # outfile = xmlOutputDir + '/' + experiment + '/' + cmipTable + '/' + variable + '/' + mip_era + '.' + activity + '.' + model + '.' + experiment + '.' + member + '.' + cmipTable + '.' + variable + '.0000000.' + version + '.0.xml'
-        outfile = xmlOutputDir + '/' + mip_era + '/' + experimentPath + '/' + realm + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + grid + '.' + gridLabel + '.' + version + '.0000000.0.xml'
+        if frequency == 'fx':
+            outfile = xmlOutputDir + '/' + mip_era + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + grid + '.' + gridLabel + '.' + version + '.0000000.0.xml'
+        else:    
+            outfile = xmlOutputDir + '/' + mip_era + '/' + experimentPath + '/' + realm + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + grid + '.' + gridLabel + '.' + version + '.0000000.0.xml'
         outfile = outfile.replace('//','/')
         # check if written already
-        ef = glob(outfile.replace('.0000000.','.*.').replace('.0.xml','.*.xml'))
+        outfilewild = outfile.replace('.0000000.','.*.').replace('.0.xml','.*.xml')
+        ef = glob(outfilewild)
+        # if replace xml flag is true and a file exists, delete the file and update the database
+        if replaceXml and len(ef) > 0:
+            cmd = 'rm ' + outfilewild
+            p = Popen(cmd,shell=True,stdout=PIPE,stderr=PIPE)
+            out,err = p.communicate()  
+            q = 'select path from paths where xmlFile like \'' + ef[0] + '\';'         
+            queryResult = sqlQuery(q)  
+            if len(queryResult) > 0:
+                xmlwrite = toSQLtime(datetime.datetime.now())
+                updateSqlCdScan(queryResult[0][0], '', xmlwrite, '')
+            # reset file check
+            ef = glob(outfilewild)
         if len(ef) == 0:
+            # if file is not written yet, create xml file
             ensure_dir(outfile)
-            # create xml
             out,err = xmlWriteDev(inpath, outfile)
-            # parse errors
+            # get write time
             xmlwrite = toSQLtime(datetime.datetime.now())
-            # check for zero sized files
+            # check for zero sized files and other no write errors (if there xml did not write)
             zeroSize = False
             if not os.path.exists(outfile):
                 fiter = glob(inpath + '/*.nc')
@@ -523,6 +552,7 @@ def process_path(xmlOutputDir, inpath):
                 else:    
                     updateSqlCdScan(inpath, None, xmlwrite, 'No write')
             else:
+                # if xml wrote to disk, update error codes in filename
                 errors = getWarnings(str(err))
                 if len(errors) > 0:
                     errorCode = parseWarnings(errors)
@@ -535,18 +565,26 @@ def process_path(xmlOutputDir, inpath):
                 updateSqlCdScan(inpath, outfile, xmlwrite, errors)
         else:
             q = 'select path from paths where xmlFile = \'' + ef[0] + '\';'
-            queryResult = sqlQuery(q)
             # if the existing xmlFile is not related to the input path
-            # then state there is an existing xml link
+            # then state there is an existing xml link (try this twice)
             # else populate the current writetime
-            xmlwrite = toSQLtime(datetime.datetime.now())
-            if len(queryResult) > 0:
-                # check if path is the same 
-                if len(findInList(inpath, queryResult[0])) == 0:   
-                    # update database with xml write
-                    updateSqlCdScan(inpath, None, xmlwrite, 'Existing xml link')
-            else:
-                updateSqlCdScan(inpath, ef[0], xmlwrite, 'Orphan xml')
+            countCheck = 0
+            while countCheck < 2:
+                queryResult = sqlQuery(q)
+                xmlwrite = toSQLtime(datetime.datetime.now())
+                if len(queryResult) > 0:
+                    # check if path is the same 
+                    if len(findInList(inpath, queryResult[0])) == 0:   
+                        # update database with xml write
+                        updateSqlCdScan(inpath, None, xmlwrite, 'Existing xml link')
+                        return
+                else:
+                    # wait 15 seconds and try again
+                    time.sleep(15)
+                    countCheck += 1
+            # tried twice (no xml), declare this xml an orphan
+            updateSqlCdScan(inpath, ef[0], xmlwrite, 'Orphan xml')
+
 
 
 def ensure_dir(file_path):
