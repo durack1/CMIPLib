@@ -72,7 +72,7 @@ def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
     realmId = realmIdLookup[realm]
     
     # vert-id lookup information
-    z1List = set(['height2m', 'height10m', 'depth0m', 'depth100m', 'olayer100m', 'sdepth1', 'sdepth10'])
+    z1List = set(['height2m', 'height10m', 'depth0m', 'depth100m', 'olayer100m', 'sdepth1', 'sdepth10', 'height100m', 'depth300m', 'depth700m', 'depth2000m'])
     lList = set(['olevel', 'olevhalf', 'alevel', 'alevhalf'])
     reP = re.compile(r'p[0-9]')
     pCheck = [not not re.search(reP,i) for i in dimensions]
@@ -101,7 +101,7 @@ def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
     elif 'rho'in dimensions:
         vertId = 'd'      
     elif 'plevs' in dimensions:  
-        vertId = 'p'         
+        vertId = 'p17'         
     elif any(plevCheck):  
         dimensions = np.array(dimensions)
         vertId = 'p' + dimensions[plevCheck][0].split('plev')[1]
@@ -120,7 +120,7 @@ def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
         regionId = 'glb'
 
     # get h1 variable
-    locList = set(['site', 'oline', 'basin', 'siline'])
+    locList = set(['site', 'oline', 'basin', 'siline', 'location'])
     dimList = set(['latitude', 'yant', 'ygre', 'longitude', 'xant', 'yant'])    
     if len(locList.intersection(set(dimensions))) > 0:
         h1 = 's'
@@ -131,14 +131,14 @@ def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
     else:
         h1 = 'g'
 
-    gridLabel = regionId + '-' + realmId + '-' + vertId + '-' + h1
+    gridLabel = regionId + '-' + vertId + '-' + h1
 
-    if mip_era == 'CMIP6':
-        if grid == 'gm':
-            gridLabel = gridLabel + 'n'
-        else:
-            gridStrip = grid.replace('g','').replace('a','').replace('z','')
-            gridLabel  = gridLabel + gridStrip
+    if grid == 'gm':
+        gridStrip = 'n'
+    else:
+        gridStrip = grid.replace('g','').replace('a','').replace('z','')
+
+    gridLabel  = gridLabel + gridStrip
 
     return gridLabel
 
@@ -180,7 +180,6 @@ def lookupCMIPMetadata(mip_era, cmipTable, variable):
         realm = data['variable_entry'][variable]['modeling_realm'].split(' ')[0]
         dimensions = data['variable_entry'][variable]['dimensions'].split(' ')
     elif mip_era == 'CMIP5':
-        cmipTable = cmipTable.replace('CFm','cfM')
         fn = 'data/cmip5/CMIP5_' + cmipTable
         f = open(fn, "r")
         lines = f.readlines()
@@ -249,8 +248,12 @@ def parsePath(path):
             institute = meta[-9]
             activity = produceCMIP5Activity(experiment)
             mip_era = 'CMIP5'
-            grid = 'gx'
+            grid = 'gu'
             frequencyx, realmx, dimensions = lookupCMIPMetadata(mip_era, cmipTable, variable)
+            if frequency == 'monClim':
+                frequency = 'monC'            
+            if 'time1' in dimensions:
+                frequency = frequency + 'Pt'
             gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
         else:
             variable = meta[-2]
@@ -264,8 +267,12 @@ def parsePath(path):
             institute = meta[-9]
             activity = produceCMIP5Activity(experiment)
             mip_era = 'CMIP5'
-            grid = 'gx'
+            grid = 'gu'                
             frequencyx, realmx, dimensions = lookupCMIPMetadata(mip_era, cmipTable, variable)
+            if frequency == 'monClim':
+                frequency = 'monC'            
+            if 'time1' in dimensions:
+                frequency = frequency + 'Pt'            
             gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
     else:
         validPath = False
@@ -503,9 +510,9 @@ def process_path(xmlOutputDir, inpath, replaceXml=False):
             experimentPath = experiment        
         # output filename
         if frequency == 'fx':
-            outfile = xmlOutputDir + '/' + mip_era + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + grid + '.' + gridLabel + '.' + version + '.0000000.0.xml'
+            outfile = xmlOutputDir + '/' + mip_era + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + realm + '.' + gridLabel + '.' + version + '.0000000.0.xml'
         else:    
-            outfile = xmlOutputDir + '/' + mip_era + '/' + experimentPath + '/' + realm + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + grid + '.' + gridLabel + '.' + version + '.0000000.0.xml'
+            outfile = xmlOutputDir + '/' + mip_era + '/' + activity + '/' + experimentPath + '/' + realm + '/' + frequency + '/' + variable + '/' + mip_era + '.' + activity + '.' + experiment + '.' + institute + '.' + model + '.' + member + '.' + frequency + '.' + variable + '.' + realm + '.' + gridLabel + '.' + version + '.0000000.0.xml'
         outfile = outfile.replace('//','/')
         # check if written already
         outfilewild = outfile.replace('.0000000.','.*.').replace('.0.xml','.*.xml')
@@ -577,7 +584,7 @@ def process_path(xmlOutputDir, inpath, replaceXml=False):
                     if len(findInList(inpath, queryResult[0])) == 0:   
                         # update database with xml write
                         updateSqlCdScan(inpath, None, xmlwrite, 'Existing xml link')
-                        return
+                    return
                 else:
                     # wait 15 seconds and try again
                     time.sleep(15)

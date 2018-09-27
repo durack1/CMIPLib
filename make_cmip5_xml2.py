@@ -80,6 +80,10 @@ if INIPYTHON == False: # Look for cmd line arguments if we are NOT in Ipython
     parser.add_argument('-c', '--countStats', type=str2bool,
                         default = False,
                         help="Boolean to record statistics on xml database")                            
+    parser.add_argument('-m', '--mode', type=str,
+                        default = '',
+                        help="Mode to specify the what to cdscan:\
+                                    frequency.variable")
 
     args = parser.parse_args()
 
@@ -89,6 +93,7 @@ if INIPYTHON == False: # Look for cmd line arguments if we are NOT in Ipython
     numProcessors = args.numProcessors
     lastTouch = args.lastTouch
     countStats = args.countStats
+    mode = args.mode
 
 else:
 
@@ -98,6 +103,7 @@ else:
     numProcessors = 20
     lastTouch = 24
     countStats = False
+    mode = ''
 
 # Define search directories
 data_directories = ['/p/css03/cmip5_css01/data/cmip5/output1/', '/p/css03/cmip5_css01/data/cmip5/output2/',
@@ -107,7 +113,7 @@ data_directories = ['/p/css03/cmip5_css01/data/cmip5/output1/', '/p/css03/cmip5_
                     '/p/css03/scratch/published-older/cmip5/', '/p/css03/scratch/should-publish/cmip5/',
                     '/p/css03/scratch/unknown-dset/cmip5/', '/p/css03/scratch/unknown-status/cmip5/',
                     '/p/css03/scratch/obsolete/cmip5/', '/p/css03/esgf_publish/cmip5/', 
-                    '/p/css03/esgf_publish/CMIP6/CMIP/']
+                    '/p/css03/esgf_publish/CMIP6/CMIP/', '/p/css03/scratch/cmip6/']
 
 
 var_in = ['snc','snd','snw','tpf','pflw', 'sic','sim','sit','snc','snd', 'agessc','cfc11','dissic','evs','ficeberg',\
@@ -126,6 +132,9 @@ exps = ['1pctCO2','abrupt4xCO2','amip','amip4K','amip4xCO2','amipFuture','histor
         'historicalGHG','historicalMisc','historicalNat','past1000','piControl','rcp26','rcp45','rcp60',\
         'rcp85', 'sstClim','sstClim4xCO2']
 
+if mode.find('.') >= 0:
+    temporal = [mode.split('.')[0]]
+    var_in = [mode.split('.')[1]]
 
 # for testing
 # data_directories = ['/p/css03/cmip5_css02/data/cmip5/output2/', '/p/css03/scratch/cmip5/', '/p/css03/esgf_publish/CMIP6/CMIP/']
@@ -184,23 +193,28 @@ q = "select path from paths where variable in (" + var_in + ") and experiment in
 # used this to get newer fgoals-g2 xmls (which have same version number as the old files)
 # q = "select path from paths where variable in (" + var_in + ") and experiment=\'historical\' and model = \'FGOALS-g2\' and tfreq = \'mon\' and ((xmlFile is NULL or xmlFile = 'None') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and path not like \'%esgf_publish%\';"
 # q = 'select path from paths where mip_era = \'CMIP6\';'
+q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and frequency in (" + temporal + ") and ((xmlFile is NULL or xmlFile = \'None\') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and retired = 0 and ignored = 0 and TIMESTAMPDIFF(HOUR, modified, now()) > " + str(lastTouch) + " ;"
 
 # q = "select path from paths where institute = \'IPSL\' and variable = \'tas\' and member like \'r1i1p1%\' and experiment = \'piControl\' and model like \'IPSL-CM%A-LR\' and frequency = \'mon\' and path like \'%esgf_publish%\'";
 
+
 # get directories
 if updateScans:
-    print('Using ' + str(numProcessors) + ' processors to scan directories...', end='\n \n')
     # get directories to scan
     print('Getting directories to scan...')
     queryResult = CMIPLib.sqlQuery(q)
-    dirs_to_scan = list(queryResult[:,0])
-    print(str(len(dirs_to_scan)) + ' directories to scan...')
-    if len(dirs_to_scan) < numProcessors:
-        numProcessors = len(dirs_to_scan)
-    print('Starting directory scanning...')
-    print('Started on: ', time.ctime()) # start time for reference
-    results = Parallel(n_jobs=numProcessors)(delayed(CMIPLib.process_path)(xmlOutputDir, inpath)\
-               for (inpath) in tqdm(dirs_to_scan))
+    if len(queryResult) > 0:
+        dirs_to_scan = list(queryResult[:,0])
+        print(str(len(dirs_to_scan)) + ' directories to scan...')
+        if len(dirs_to_scan) < numProcessors:
+            numProcessors = len(dirs_to_scan)
+        print('Using ' + str(numProcessors) + ' processors to scan directories...', end='\n \n')
+        print('Starting directory scanning...')
+        print('Started on: ', time.ctime()) # start time for reference
+        results = Parallel(n_jobs=numProcessors)(delayed(CMIPLib.process_path)(xmlOutputDir, inpath)\
+                   for (inpath) in tqdm(dirs_to_scan))
+    else:
+        print('No directories found...')
 
 if countStats:
     print('Writing statistics to database', end='\n\n')
@@ -209,6 +223,8 @@ if countStats:
     q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip6 directories\', (select count(*) as n from paths where mip_era = \'CMIP6\'), now());")
     q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip5 xml files\', (select count(*) as n from paths where mip_era = \'CMIP5\' and xmlFile is NOT NULL), now());")
     q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip6 xml files\', (select count(*) as n from paths where mip_era = \'CMIP6\' and xmlFile is NOT NULL), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'undefined vertical grid (cmip5)\', (select count(*) as n from paths where mip_era = \'CMIP5\' and gridLabel like \'%-%-x-%\'), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'undefined vertical grid (cmip6)\', (select count(*) as n from paths where mip_era = \'CMIP6\' and gridLabel like \'%-%-x-%\'), now());")    
     for query in q:
         queryResult = CMIPLib.sqlInsertQuery(query)
 
