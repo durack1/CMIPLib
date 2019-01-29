@@ -20,3 +20,6 @@ CREATE TABLE stats (pid int NOT NULL AUTO_INCREMENT, indicator varchar(255), val
 
 -- probably not needed: set global max_allowed_packet=67108864;
 -- /etc/init.d/mysqld restart
+
+-- probably needed:
+-- SET GLOBAL innodb_lock_wait_timeout = 20000;

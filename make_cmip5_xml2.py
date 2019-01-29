@@ -10,6 +10,8 @@ Paul J. Durack and Stephen Po-Chedley 11th April 2018
 Command line usage: 
     Help: ./make_cmip5_xml2.py --help
     Example: ./make_cmip5_xml2.py -p 'True' -s 'False' -n 1
+    Production: ./make_cmip5_xml2.py -p 'True' -r 'True' -s 'True' -c 'True' -n 20
+    Subset: ./make_cmip5_xml2.py -p 'False' -r 'False' -s 'True' -c 'False' -n 20 -m 'historical.mon.tro3'
 
 Script is meant to create xml library in several parts:
     + Find all CMIP5 directory paths 
@@ -47,6 +49,7 @@ else:
     INIPYTHON = True
 
 print('Started on: ', time.ctime()) # start time for reference
+print()
 t00 = time.time() # time whole script
 
 # function to parse boolean
@@ -73,17 +76,21 @@ if INIPYTHON == False: # Look for cmd line arguments if we are NOT in Ipython
                         default = '/work/cmip-dyn/',
                         help="Base output directory for xml files (default /work/cmip-dyn/)")
     parser.add_argument('-n', '--numProcessors', type=int,
+                        default = 20,
                         help="Number of processors for creating xml files (default 20)")
     parser.add_argument('-l', '--lastTouch', type=int,
                         default = 24,
                         help="Number of hours since a directory was modified to process it")  
     parser.add_argument('-c', '--countStats', type=str2bool,
                         default = False,
-                        help="Boolean to record statistics on xml database")                            
+                        help="Boolean to record statistics on xml database")  
+    parser.add_argument('-r', '--retirePaths', type=str2bool,
+                        default = True,
+                        help="Boolean to look for paths that no longer exist")                                                    
     parser.add_argument('-m', '--mode', type=str,
                         default = '',
                         help="Mode to specify the what to cdscan:\
-                                    frequency.variable")
+                                    experiment.frequency.variable")
 
     args = parser.parse_args()
 
@@ -94,15 +101,16 @@ if INIPYTHON == False: # Look for cmd line arguments if we are NOT in Ipython
     lastTouch = args.lastTouch
     countStats = args.countStats
     mode = args.mode
+    retirePaths = args.retirePaths
 
 else:
-
+    retirePaths = True
     updatePaths = False
     updateScans = True
     xmlOutputDir = '/work/cmip-dyn/'
     numProcessors = 20
     lastTouch = 24
-    countStats = False
+    countStats = True
     mode = ''
 
 # Define search directories
@@ -133,8 +141,12 @@ exps = ['1pctCO2','abrupt4xCO2','amip','amip4K','amip4xCO2','amipFuture','histor
         'rcp85', 'sstClim','sstClim4xCO2']
 
 if mode.find('.') >= 0:
-    temporal = [mode.split('.')[0]]
-    var_in = [mode.split('.')[1]]
+    x = mode.split('.')
+    if x[0] != '*':
+        exps = [x[0]]
+    temporal = [x[1]]
+    if x[2] != '*':
+        var_in = [x[2]]
 
 # for testing
 # data_directories = ['/p/css03/cmip5_css02/data/cmip5/output2/', '/p/css03/scratch/cmip5/', '/p/css03/esgf_publish/CMIP6/CMIP/']
@@ -147,6 +159,20 @@ if mode.find('.') >= 0:
 #     print(path)
 #     CMIPLib.process_path(xmlOutputDir, path)
 
+if retirePaths:
+    print('Checking for retired directories...')
+    print('Started on: ', time.ctime(), end='\n \n') # start time for reference
+    q = 'select path, xmlFile from paths where xmlFile is not NULL and xmlFile != \'None\' and retired = 0;'
+    queryResult = CMIPLib.sqlQuery(q)
+    for i in range(len(queryResult)):
+        p = queryResult[i][0]
+        f = queryResult[i][1]
+        if not os.path.exists(p):
+            # remove from database
+            CMIPLib.retireDirectory(p)
+            # delete xml file
+            if os.path.exists(f):
+                os.system('rm ' + f)
 
 if updatePaths:
     # grab the right number of processors
@@ -184,7 +210,7 @@ var_in = '\'' + '\', \''.join(var_in) + '\''
 temporal = '\'' + '\', \''.join(temporal) + '\''
 exps = '\'' + '\', \''.join(exps) + '\''
 # create query 
-q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and frequency in (" + temporal + ") and ((xmlFile is NULL or xmlFile = \'None\') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and TIMESTAMPDIFF(HOUR, modified, now()) > " + str(lastTouch) + " ;"
+# q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and frequency in (" + temporal + ") and ((xmlFile is NULL or xmlFile = \'None\') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and TIMESTAMPDIFF(HOUR, modified, now()) > " + str(lastTouch) + " ;"
 # q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and (xmlFile is NULL);"
 # used this to run all files with any no write error
 # q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and tfreq in (" + temporal + ") and cdscanerror like 'No write%';"
@@ -193,7 +219,8 @@ q = "select path from paths where variable in (" + var_in + ") and experiment in
 # used this to get newer fgoals-g2 xmls (which have same version number as the old files)
 # q = "select path from paths where variable in (" + var_in + ") and experiment=\'historical\' and model = \'FGOALS-g2\' and tfreq = \'mon\' and ((xmlFile is NULL or xmlFile = 'None') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and path not like \'%esgf_publish%\';"
 # q = 'select path from paths where mip_era = \'CMIP6\';'
-q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and frequency in (" + temporal + ") and ((xmlFile is NULL or xmlFile = \'None\') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and retired = 0 and ignored = 0 and TIMESTAMPDIFF(HOUR, modified, now()) > " + str(lastTouch) + " ;"
+q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and frequency in (" + temporal + ") and ((xmlFile is NULL or xmlFile = \'None\') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and retired = 0 and (ignored = 0 OR ignored is NULL) and TIMESTAMPDIFF(HOUR, modified, now()) > " + str(lastTouch) + " ;"
+q = "select path from paths where variable in (" + var_in + ") and experiment in (" + exps + ") and frequency in (" + temporal + ") and ((xmlFile is NULL or xmlFile = \'\' or xmlFile = 'None') or (xmlwritedatetime < modified or xmlwritedatetime is NULL)) and retired = 0 and (ignored = 0 OR ignored is NULL) and TIMESTAMPDIFF(HOUR, modified, now()) > " + str(lastTouch) + ";"
 
 # q = "select path from paths where institute = \'IPSL\' and variable = \'tas\' and member like \'r1i1p1%\' and experiment = \'piControl\' and model like \'IPSL-CM%A-LR\' and frequency = \'mon\' and path like \'%esgf_publish%\'";
 
@@ -219,15 +246,14 @@ if updateScans:
 if countStats:
     print('Writing statistics to database', end='\n\n')
     q = []
-    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip5 directories\', (select count(*) as n from paths where mip_era = \'CMIP5\'), now());")
-    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip6 directories\', (select count(*) as n from paths where mip_era = \'CMIP6\'), now());")
-    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip5 xml files\', (select count(*) as n from paths where mip_era = \'CMIP5\' and xmlFile is NOT NULL), now());")
-    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip6 xml files\', (select count(*) as n from paths where mip_era = \'CMIP6\' and xmlFile is NOT NULL), now());")
-    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'undefined vertical grid (cmip5)\', (select count(*) as n from paths where mip_era = \'CMIP5\' and gridLabel like \'%-%-x-%\'), now());")
-    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'undefined vertical grid (cmip6)\', (select count(*) as n from paths where mip_era = \'CMIP6\' and gridLabel like \'%-%-x-%\'), now());")    
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip5 directories\', (select count(*) as n from paths where mip_era = \'CMIP5\' and retired=0), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip6 directories\', (select count(*) as n from paths where mip_era = \'CMIP6\' and retired=0), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip5 xml files\', (select count(*) as n from paths where mip_era = \'CMIP5\' and xmlFile is NOT NULL and xmlFile != 'None' and retired=0), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'cmip6 xml files\', (select count(*) as n from paths where mip_era = \'CMIP6\' and xmlFile is NOT NULL and xmlFile != 'None' and retired=0), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'undefined vertical grid (cmip5)\', (select count(*) as n from paths where mip_era = \'CMIP5\' and gridLabel like \'%-%-x-%\' and retired=0), now());")
+    q.append("INSERT INTO stats (indicator, value, datetime) VALUES (\'undefined vertical grid (cmip6)\', (select count(*) as n from paths where mip_era = \'CMIP6\' and gridLabel like \'%-%-x-%\' and retired=0), now());")    
     for query in q:
         queryResult = CMIPLib.sqlInsertQuery(query)
-
 
 print('Finished on: ', time.ctime()) # start time for reference
 

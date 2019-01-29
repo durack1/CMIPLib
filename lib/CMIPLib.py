@@ -69,7 +69,7 @@ def createGridLabel(mip_era, realm, cmipTable, grid, dimensions):
     realmIdLookup = {'aerosol' : 'ae', 'atmos' : 'ap', 'atmosChem' : 'ac', 
                     'land' : 'ld', 'landIce' : 'gi', 'seaIce' : 'si', 
                     'ocean' : 'op', 'ocnBgchem' : 'oc', 'river' : 'rr'}
-    realmId = realmIdLookup[realm]
+    # realmId = realmIdLookup[realm]
     
     # vert-id lookup information
     z1List = set(['height2m', 'height10m', 'depth0m', 'depth100m', 'olayer100m', 'sdepth1', 'sdepth10', 'height100m', 'depth300m', 'depth700m', 'depth2000m'])
@@ -223,7 +223,7 @@ def parsePath(path):
     if check != None:
         checkBad = False
     if ((len(meta) > 10) & (checkBad)):
-        if meta[-10] == 'CMIP6':
+        if meta[-10].upper() == 'CMIP6':
             version = meta[-1]
             grid = meta[-2]
             variable = meta[-3]
@@ -233,9 +233,25 @@ def parsePath(path):
             model = meta[-7]
             institute = meta[-8]
             activity = meta[-9] 
-            mip_era = meta[-10] 
-            frequency, realm, dimensions = lookupCMIPMetadata(mip_era, cmipTable, variable)
-            gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
+            mip_era = meta[-10].upper()
+            try:
+                frequency, realm, dimensions = lookupCMIPMetadata(mip_era, cmipTable, variable)
+                gridLabel = createGridLabel(mip_era, realm, cmipTable, grid, dimensions)
+            except:
+                validPath = False
+                version = []
+                grid = []
+                variable = []
+                cmipTable = []
+                realm = []
+                frequency = []
+                gridLabel = []
+                member = []
+                experiment = []
+                model = []
+                institute = []
+                activity = []
+                mip_era = []                
         elif ((meta[-1] != '1') & (meta[-1] != '2')):
             variable = meta[-1]
             version = meta[-2]
@@ -597,7 +613,10 @@ def process_path(xmlOutputDir, inpath, replaceXml=False):
 def ensure_dir(file_path):
     directory = os.path.dirname(file_path)
     if not os.path.exists(directory):
-        os.makedirs(directory)      
+        try:
+            os.makedirs(directory)      
+        except OSError:
+            pass            
 
 #%%
 def getWarnings(err):
@@ -630,7 +649,7 @@ def parseWarnings(err):
         errorCode[2] = '1'
     if err.find('zero infile size') >= 0:
         errorCode[3] = '1'                        
-    if err.find('dimension time overlaps file') >= 0:
+    if err.find('dimension time overlaps file') + err.find('dimension time contains values in file') >= 0:
         errorCode[4] = '1'
     if err.find('Your first bounds') >= 0:
         errorCode[5] = '1'        
@@ -744,6 +763,32 @@ def retireDirectory(full_path):
     c.execute(query)
     conn.commit()
     conn.close()
+
+    # check for other directories
+    validPath, variable, version, member, cmipTable, realm, frequency, grid, gridLabel, experiment, model, institute, activity, mip_era = parsePath(full_path)
+    query = 'select path from paths where variable = \'' + variable + \
+        '\' and version = \'' + version +  \
+        '\' and member = \'' + member +  \
+        '\' and cmipTable = \'' + cmipTable + \
+        '\' and realm = \'' + realm + \
+        '\' and frequency = \'' + frequency + \
+        '\' and grid = \'' + grid + \
+        '\' and gridLabel = \'' + gridLabel + \
+        '\' and experiment = \'' + experiment + \
+        '\' and model = \'' + model + \
+        '\' and institute = \'' + institute + \
+        '\' and activity = \'' + activity + \
+        '\' and mip_era = \'' + mip_era +  \
+        '\' and path != \'' + full_path + '\';'
+
+    data = sqlQuery(query)       
+    if len(data) > 0:
+        for i in range(len(data)):
+            p = data[i][0]
+            query = 'update paths set xmlFile = \'\', cdscanerror= \'\' where path = \'' + p + '\';'
+            sqlInsertQuery(query)
+
+    
 
 #%% Define functions - moved from make_cmip5_xml1.py
 def checkPID(pid):
